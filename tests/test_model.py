@@ -3,6 +3,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from code_lens.model import analyze_source, analyze_versions
+from code_lens.evaluation import ExerciseSpec, evaluate_source
+from code_lens.features import export_timeline_jsonl, extract_transition_features
+from code_lens.ml import LogisticRegressionModel, labels_from_rows, train
 from code_lens.snapshots import SnapshotStore, analyze_snapshots
 
 
@@ -48,6 +51,45 @@ class AnalysisModelTests(unittest.TestCase):
             report = analyze_snapshots(store.load())
         self.assertEqual(len(report.transitions), 1)
         self.assertIn("invalid Python", report.transitions[0].analysis_error)
+
+    def test_extracts_features_and_exports_jsonl(self):
+        before = "def total(items):\n    value = 0\n    for item in items:\n        for other in items:\n            value += item + other\n    return value\n"
+        after = "def total(items):\n    value = sum(items)\n    return value * len(items) + value * len(items)\n"
+        with TemporaryDirectory() as directory:
+            store = SnapshotStore(Path(directory) / "student-1")
+            store.capture(before, "compile")
+            store.capture(after, "submission")
+            report = analyze_snapshots(store.load())
+            row = extract_transition_features(report.transitions[0])
+            destination = Path(directory) / "features.jsonl"
+            export_timeline_jsonl(report, destination)
+            saved = destination.read_text(encoding="utf-8")
+        self.assertEqual(row.loop_depth_change, -2)
+        self.assertEqual(row.baseline_label, "meaningful_improvement")
+        self.assertIn('"from_snapshot": 1', saved)
+
+    def test_evaluation_runs_tests_and_benchmark(self):
+        spec = ExerciseSpec("double", (([2], 4), ([3], 6)), ([100],), 2)
+        result = evaluate_source("def double(value):\n    return value * 2\n", spec)
+        self.assertEqual(result.pass_rate, 1.0)
+        self.assertIsNotNone(result.median_runtime_ms)
+
+    def test_trains_and_serializes_ml_classifier(self):
+        rows = [
+            {"matched_functions": 1, "score": 0, "loop_depth_change": 0, "loop_count_change": 0,
+             "cyclomatic_complexity_change": 0, "repeated_sort_change": 0, "list_membership_change": 0,
+             "string_concat_change": 0, "correctness_change": 0, "runtime_change_percent": 5, "label": 0},
+            {"matched_functions": 1, "score": 8, "loop_depth_change": -1, "loop_count_change": -1,
+             "cyclomatic_complexity_change": -2, "repeated_sort_change": -1, "list_membership_change": 0,
+             "string_concat_change": 0, "correctness_change": 0, "runtime_change_percent": -60, "label": 1},
+        ]
+        model = train(rows, labels_from_rows(rows), epochs=300)
+        self.assertGreater(model.probability(rows[1]), model.probability(rows[0]))
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "model.json"
+            model.save(path)
+            restored = LogisticRegressionModel.load(path)
+        self.assertAlmostEqual(restored.probability(rows[1]), model.probability(rows[1]))
 
 
 if __name__ == "__main__":

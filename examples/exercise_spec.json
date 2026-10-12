@@ -1,0 +1,9 @@
+{
+  "function_name": "unique_sorted_groups",
+  "tests": [
+    {"args": [[[3, 1], [2, 1]]], "expected": [1, 2, 3]},
+    {"args": [[[]]], "expected": []}
+  ],
+  "benchmark_args": [[[[100, 99, 98], [97, 96, 95]]]],
+  "benchmark_repeats": 10
+}
