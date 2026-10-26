@@ -36,6 +36,15 @@ class ChangeAttribution:
     def is_meaningful(self) -> bool:
         return self.score >= 3
 
+    @property
+    def evidence(self) -> tuple[tuple[int, str], ...]:
+        """The individual rules and points that produced ``score``.
+
+        Keeping this alongside the short ``reasons`` view lets command-line
+        users inspect a result instead of treating its score as a black box.
+        """
+        return tuple(_reasons(self.before, self.after))
+
 
 class _FunctionVisitor(ast.NodeVisitor):
     def __init__(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
