@@ -17,6 +17,7 @@ class FunctionMetrics:
     repeated_sort_calls: int
     list_membership_checks: int
     string_concat_in_loop: int
+    sliding_window_patterns: int
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,38 @@ class _FunctionVisitor(ast.NodeVisitor):
         self.repeated_sort_calls = 0
         self.list_membership_checks = 0
         self.string_concat_in_loop = 0
+        self.sliding_window_patterns = 0
+        self.string_names: set[str] = set()
+
+    @staticmethod
+    def _assigned_names(target: ast.AST) -> set[str]:
+        if isinstance(target, ast.Name):
+            return {target.id}
+        if isinstance(target, (ast.Tuple, ast.List)):
+            return set().union(*(_FunctionVisitor._assigned_names(item) for item in target.elts))
+        return set()
+
+    @staticmethod
+    def _is_string_expression(node: ast.AST) -> bool:
+        return isinstance(node, ast.JoinedStr) or (
+            isinstance(node, ast.Constant) and isinstance(node.value, str)
+        )
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        names = set().union(*(self._assigned_names(target) for target in node.targets))
+        if self._is_string_expression(node.value):
+            self.string_names.update(names)
+        else:
+            self.string_names.difference_update(names)
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        names = self._assigned_names(node.target)
+        if node.value is not None and self._is_string_expression(node.value):
+            self.string_names.update(names)
+        else:
+            self.string_names.difference_update(names)
+        self.generic_visit(node)
 
     def visit_If(self, node: ast.If) -> None:
         self.complexity += 1
@@ -82,7 +115,34 @@ class _FunctionVisitor(ast.NodeVisitor):
         self.loop_depth -= 1
 
     def visit_For(self, node: ast.For) -> None:
+        if self._is_sliding_window(node):
+            self.sliding_window_patterns += 1
         self._visit_loop(node)
+
+    @staticmethod
+    def _is_sliding_window(node: ast.For) -> bool:
+        """Recognise a conservative expand/shrink window shape.
+
+        The outer `for` expands a window; an inner `while` must test an ordered
+        threshold and both shrink a running value and advance a boundary.
+        """
+        for child in node.body:
+            if not isinstance(child, ast.While) or not _FunctionVisitor._has_threshold_test(child.test):
+                continue
+            additions = [item for item in ast.walk(child)
+                         if isinstance(item, ast.AugAssign) and isinstance(item.target, ast.Name)
+                         and isinstance(item.op, ast.Add) and isinstance(item.value, ast.Constant)
+                         and isinstance(item.value.value, (int, float)) and item.value.value > 0]
+            subtractions = [item for item in ast.walk(child)
+                            if isinstance(item, ast.AugAssign) and isinstance(item.op, ast.Sub)]
+            if additions and subtractions:
+                return True
+        return False
+
+    @staticmethod
+    def _has_threshold_test(node: ast.AST) -> bool:
+        return any(isinstance(item, ast.Compare) and any(isinstance(op, (ast.Gt, ast.GtE)) for op in item.ops)
+                   for item in ast.walk(node))
 
     def visit_While(self, node: ast.While) -> None:
         self._visit_loop(node)
@@ -101,14 +161,16 @@ class _FunctionVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_AugAssign(self, node: ast.AugAssign) -> None:
-        if self.loop_depth and isinstance(node.op, ast.Add) and isinstance(node.value, (ast.Constant, ast.JoinedStr)):
+        if (self.loop_depth and isinstance(node.op, ast.Add) and isinstance(node.target, ast.Name)
+                and node.target.id in self.string_names):
             self.string_concat_in_loop += 1
         self.generic_visit(node)
 
     def metrics(self) -> FunctionMetrics:
         return FunctionMetrics(self.node.name, self.node.lineno, self.complexity, self.loop_count,
                                self.max_loop_depth, self.repeated_sort_calls,
-                               self.list_membership_checks, self.string_concat_in_loop)
+                               self.list_membership_checks, self.string_concat_in_loop,
+                               self.sliding_window_patterns)
 
 
 def analyze_source(source: str) -> ProgramAnalysis:
@@ -124,6 +186,8 @@ def analyze_source(source: str) -> ProgramAnalysis:
 
 
 def _reasons(before: FunctionMetrics, after: FunctionMetrics) -> Iterable[tuple[int, str]]:
+    if after.sliding_window_patterns > before.sliding_window_patterns:
+        yield 4, "introduced an expand/shrink sliding-window pattern"
     if after.max_loop_depth < before.max_loop_depth:
         yield 4, f"reduced maximum loop nesting from {before.max_loop_depth} to {after.max_loop_depth}"
     if after.repeated_sort_calls < before.repeated_sort_calls:

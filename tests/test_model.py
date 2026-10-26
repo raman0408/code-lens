@@ -1,10 +1,12 @@
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from code_lens.model import analyze_source, analyze_versions
-from code_lens.evaluation import ExerciseSpec, evaluate_source
-from code_lens.features import export_timeline_jsonl, extract_transition_features
+from code_lens.evaluation import BenchmarkSeries, ExerciseSpec, evaluate_source
+from code_lens.features import (assemble_reviewed_dataset, audit_static_rules, export_timeline_jsonl,
+                                 extract_transition_features)
 from code_lens.ml import LogisticRegressionModel, labels_from_rows, train
 from code_lens.snapshots import SnapshotStore, analyze_snapshots
 
@@ -24,6 +26,18 @@ class AnalysisModelTests(unittest.TestCase):
         self.assertEqual(changes[0].function, "rank")
         self.assertTrue(changes[0].is_meaningful)
         self.assertIn("moved or removed sorting from a loop", changes[0].reasons)
+
+    def test_counts_only_known_string_concatenation_in_a_loop(self):
+        source = "def work(items):\n    text = ''\n    total = 0\n    for item in items:\n        text += item\n        total += 1\n    return text, total\n"
+        metrics = analyze_source(source).functions["work"]
+        self.assertEqual(metrics.string_concat_in_loop, 1)
+
+    def test_detects_conservative_sliding_window_pattern(self):
+        before = "def smallest(target, values):\n    best = len(values) + 1\n    for left in range(len(values)):\n        total = 0\n        for right in range(left, len(values)):\n            total += values[right]\n            if total >= target:\n                best = min(best, right - left + 1)\n                break\n    return best\n"
+        after = "def smallest(target, values):\n    left = total = 0\n    best = len(values) + 1\n    for right, value in enumerate(values):\n        total += value\n        while total >= target:\n            best = min(best, right - left + 1)\n            total -= values[left]\n            left += 1\n    return best\n"
+        changes = analyze_versions(before, after)
+        self.assertIn("introduced an expand/shrink sliding-window pattern", changes[0].reasons)
+        self.assertTrue(changes[0].is_meaningful)
 
     def test_ignores_unmatched_functions(self):
         self.assertEqual(analyze_versions("def old(): pass", "def new(): pass"), [])
@@ -65,14 +79,69 @@ class AnalysisModelTests(unittest.TestCase):
             export_timeline_jsonl(report, destination)
             saved = destination.read_text(encoding="utf-8")
         self.assertEqual(row.loop_depth_change, -2)
-        self.assertEqual(row.baseline_label, "meaningful_improvement")
+        self.assertEqual(row.baseline_label, "not_meaningful")
+        self.assertFalse(row.is_eligible_improvement)
         self.assertIn('"from_snapshot": 1', saved)
+
+    def test_eligible_improvement_must_be_correct_and_non_regressive(self):
+        before = "def all_positive(values):\n    result = True\n    for value in values:\n        for copy in (value,):\n            if copy <= 0:\n                result = False\n    return result\n"
+        after = "def all_positive(values):\n    return all(value > 0 for value in values)\n"
+        spec = ExerciseSpec("all_positive", (([[1, 2]], True), ([[-1, 2]], False)))
+        with TemporaryDirectory() as directory:
+            store = SnapshotStore(Path(directory) / "student-1")
+            store.capture(before, "compile")
+            store.capture(after, "submission")
+            row = extract_transition_features(analyze_snapshots(store.load()).transitions[0], spec)
+        self.assertTrue(row.after_is_correct)
+        self.assertTrue(row.correctness_preserved)
+        self.assertTrue(row.is_eligible_improvement)
+
+    def test_incorrect_after_version_is_not_an_eligible_improvement(self):
+        before = "def all_positive(values):\n    result = True\n    for value in values:\n        for copy in (value,):\n            if copy <= 0:\n                result = False\n    return result\n"
+        after = "def all_positive(values):\n    return True\n"
+        spec = ExerciseSpec("all_positive", (([[1, 2]], True), ([[-1, 2]], False)))
+        with TemporaryDirectory() as directory:
+            store = SnapshotStore(Path(directory) / "student-1")
+            store.capture(before, "compile")
+            store.capture(after, "submission")
+            row = extract_transition_features(analyze_snapshots(store.load()).transitions[0], spec)
+        self.assertFalse(row.after_is_correct)
+        self.assertFalse(row.is_eligible_improvement)
 
     def test_evaluation_runs_tests_and_benchmark(self):
         spec = ExerciseSpec("double", (([2], 4), ([3], 6)), ([100],), 2)
         result = evaluate_source("def double(value):\n    return value * 2\n", spec)
         self.assertEqual(result.pass_rate, 1.0)
         self.assertIsNotNone(result.median_runtime_ms)
+
+    def test_evaluation_records_multi_size_growth(self):
+        series = BenchmarkSeries("items", ((10, [[1] * 10]), (100, [[1] * 100])))
+        spec = ExerciseSpec("total", (([[1, 2]], 3),), (), (series,), 50)
+        result = evaluate_source("def total(values):\n    return sum(values)\n", spec)
+        self.assertEqual(result.pass_rate, 1.0)
+        self.assertEqual(len(result.series_timings_ms), 2)
+        self.assertIsNotNone(result.growth_exponent)
+
+    def test_assembles_and_audits_reviewed_dataset(self):
+        with TemporaryDirectory() as directory:
+            store = Path(directory) / "student-1" / "attempt-1"
+            store.mkdir(parents=True)
+            (store / "metadata.json").write_text(json.dumps({
+                "dataset_source": "synthetic", "student_id": "student-1", "attempt_id": "attempt-1",
+                "language": "python", "problem_reference": {"number": 1, "title": "Example"},
+            }), encoding="utf-8")
+            (store / "transitions.jsonl").write_text(
+                '{"from_snapshot": 1, "to_snapshot": 2, "score": 4}\n'
+                '{"from_snapshot": 2, "to_snapshot": 3, "score": 0}\n', encoding="utf-8")
+            (store / "gold_labels.jsonl").write_text(
+                '{"from_snapshot": 1, "to_snapshot": 2, "label": 0, "decision": "refactor"}\n'
+                '{"from_snapshot": 2, "to_snapshot": 3, "label": 1, "decision": "algorithm"}\n', encoding="utf-8")
+            destination = Path(directory) / "reviewed.jsonl"
+            rows = assemble_reviewed_dataset([store], destination)
+            report = audit_static_rules(rows)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(report.false_positive, 1)
+        self.assertEqual(report.false_negative, 1)
 
     def test_trains_and_serializes_ml_classifier(self):
         rows = [

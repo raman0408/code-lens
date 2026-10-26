@@ -40,10 +40,19 @@ code-lens demo .code-lens/demo-student
 # Export a real student's transitions. The optional spec runs instructor tests
 # and small benchmarks in a separate Python process.
 code-lens dataset .code-lens/student-42 data/student-42.jsonl --spec examples/exercise_spec.json
+
+# Join generated features to separate human-review labels before training.
+code-lens reviewed-dataset data/reviewed-transitions.jsonl data/synthetic_codex/student-001/palindrome-number
+
+# Measure where static rules disagree with human review.
+code-lens audit data/reviewed-transitions.jsonl --details --output data/static-rule-audit.json
 ```
 
-The `baseline_label` is only a transparent rule-based starting label. Replace it
-with instructor annotations before training a classifier or learning-to-rank model.
+The `baseline_label` is only a transparent rule-based starting label. A transition
+is eligible for that label only when its after-version passes every exercise test,
+does not pass fewer tests than its before-version, and has a meaningful structural
+improvement score. Replace baseline labels with instructor annotations before
+training a classifier or learning-to-rank model.
 The evaluation harness is for local development; it is not a security sandbox for
 untrusted code.
 
@@ -65,7 +74,9 @@ collect many real, independently instructor-labelled timelines before reporting
 model accuracy.
 
 Rule labels can bootstrap a mechanics-only experiment, but are not valid final
-training data because the model would simply learn to reproduce the rules:
+training data because the model would simply learn to reproduce the rules. Export
+with `--spec`; without exercise tests, transitions are not correctness-verified
+and therefore receive no positive baseline label:
 
 ```powershell
 code-lens train data/bootstrap.jsonl models/bootstrap-model.json --use-baseline-labels

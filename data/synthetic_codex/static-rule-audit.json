@@ -1,0 +1,61 @@
+{
+  "reviewed": 55,
+  "static_positive": 6,
+  "reviewed_positive": 3,
+  "true_positive": 2,
+  "true_negative": 48,
+  "false_positive": 4,
+  "false_negative": 1,
+  "disagreements": [
+    {
+      "student_id": "student-001",
+      "attempt_id": "palindrome-number",
+      "from_snapshot": 4,
+      "to_snapshot": 5,
+      "static_score": 7,
+      "reviewed_label": 0,
+      "review_decision": "correct_refactor_only",
+      "outcome": "false_positive"
+    },
+    {
+      "student_id": "student-001",
+      "attempt_id": "palindrome-number",
+      "from_snapshot": 6,
+      "to_snapshot": 7,
+      "static_score": 7,
+      "reviewed_label": 0,
+      "review_decision": "correctness_regression",
+      "outcome": "false_positive"
+    },
+    {
+      "student_id": "student-001",
+      "attempt_id": "length-of-last-word",
+      "from_snapshot": 5,
+      "to_snapshot": 6,
+      "static_score": 7,
+      "reviewed_label": 0,
+      "review_decision": "correct_refactor_only",
+      "outcome": "false_positive"
+    },
+    {
+      "student_id": "student-001",
+      "attempt_id": "length-of-last-word",
+      "from_snapshot": 9,
+      "to_snapshot": 10,
+      "static_score": 7,
+      "reviewed_label": 0,
+      "review_decision": "cosmetic_refactor",
+      "outcome": "false_positive"
+    },
+    {
+      "student_id": "student-001",
+      "attempt_id": "minimum-size-subarray-sum",
+      "from_snapshot": 3,
+      "to_snapshot": 4,
+      "static_score": 0,
+      "reviewed_label": 1,
+      "review_decision": "asymptotic_improvement",
+      "outcome": "false_negative"
+    }
+  ]
+}
