@@ -7,8 +7,49 @@ from pathlib import Path
 from .evaluation import ExerciseSpec
 from .features import export_timeline_jsonl, extract_transition_features
 from .ml import LogisticRegressionModel, labels_from_rows, load_jsonl, train
-from .model import analyze_versions
+from .model import FunctionMetrics, analyze_source, analyze_versions
 from .snapshots import SnapshotStore, analyze_snapshots
+
+
+def _metrics(metrics: FunctionMetrics) -> str:
+    """Render the exact static measurements used by the rule engine."""
+    return (
+        f"complexity={metrics.cyclomatic_complexity}, loops={metrics.loop_count}, "
+        f"max nesting={metrics.max_loop_depth}, sorts in loops={metrics.repeated_sort_calls}, "
+        f"literal-list membership checks={metrics.list_membership_checks}, "
+        f"string concatenations in loops={metrics.string_concat_in_loop}"
+    )
+
+
+def _print_comparison_explanation(before_source: str, after_source: str, prefix: str = "") -> None:
+    """Print an inspectable trace of the deterministic comparison."""
+    before = analyze_source(before_source)
+    after = analyze_source(after_source)
+    shared_names = sorted(before.functions.keys() & after.functions.keys())
+    changes = {change.function: change for change in analyze_versions(before_source, after_source)}
+    print(f"{prefix}Compared top-level functions: {', '.join(shared_names) or '(none)'}")
+    for name in shared_names:
+        change = changes.get(name)
+        print(f"{prefix}{name}")
+        print(f"{prefix}  before: {_metrics(before.functions[name])}")
+        print(f"{prefix}  after:  {_metrics(after.functions[name])}")
+        if change is None:
+            print(f"{prefix}  rule result: no monitored metric decreased (score: 0)")
+            continue
+        print(f"{prefix}  rule result: score {change.score} "
+              f"({'meaningful' if change.is_meaningful else 'below meaningful threshold of 3'})")
+        for points, reason in change.evidence:
+            print(f"{prefix}    +{points}: {reason}")
+
+
+def _print_prediction_explanation(model: LogisticRegressionModel, row: dict[str, object], prefix: str = "") -> None:
+    """Show raw feature values and their weighted contribution to one prediction."""
+    print(f"{prefix}ML feature trace (raw value; weighted standardized contribution):")
+    for name, mean, scale, weight in zip(model.feature_names, model.means, model.scales, model.weights):
+        value = 0.0 if row.get(name) is None else float(row[name])
+        contribution = weight * ((value - mean) / scale)
+        print(f"{prefix}  {name}: {value:g}; {contribution:+.3f}")
+    print(f"{prefix}  bias: {model.bias:+.3f}")
 
 
 def main() -> int:
@@ -17,12 +58,14 @@ def main() -> int:
     compare = subparsers.add_parser("compare", help="compare before.py to after.py")
     compare.add_argument("before", type=Path)
     compare.add_argument("after", type=Path)
+    compare.add_argument("--explain", action="store_true", help="show metrics and rule points behind the result")
     capture = subparsers.add_parser("capture", help="record a source snapshot after a compile or submission")
     capture.add_argument("store", type=Path, help="directory for this student's snapshot timeline")
     capture.add_argument("source", type=Path)
     capture.add_argument("--event", choices=("compile", "submission"), required=True)
     timeline = subparsers.add_parser("timeline", help="analyze every consecutive snapshot in a store")
     timeline.add_argument("store", type=Path)
+    timeline.add_argument("--explain", action="store_true", help="show evidence for every snapshot transition")
     dataset = subparsers.add_parser("dataset", help="export ML-ready transition features as JSONL")
     dataset.add_argument("store", type=Path)
     dataset.add_argument("output", type=Path)
@@ -38,6 +81,7 @@ def main() -> int:
     predict.add_argument("store", type=Path)
     predict.add_argument("model", type=Path)
     predict.add_argument("--spec", type=Path, help="optional exercise evaluation configuration")
+    predict.add_argument("--explain", action="store_true", help="show rule and ML-feature evidence for each prediction")
     args = parser.parse_args()
     if args.command == "capture":
         snapshot = SnapshotStore(args.store).capture(args.source.read_text(encoding="utf-8"), args.event)
@@ -45,6 +89,14 @@ def main() -> int:
         return 0
     if args.command == "timeline":
         report = analyze_snapshots(SnapshotStore(args.store).load())
+        if args.explain:
+            print("Timeline evidence:")
+            for transition in report.transitions:
+                print(f"Snapshot {transition.before.sequence} -> {transition.after.sequence}")
+                if transition.analysis_error:
+                    print(f"  analysis error: {transition.analysis_error}")
+                else:
+                    _print_comparison_explanation(transition.before.source, transition.after.source, "  ")
         best = report.best_improvement
         if best is None:
             print("No material performance-oriented improvement detected across the snapshot timeline.")
@@ -92,14 +144,22 @@ def main() -> int:
             print("No snapshot transitions to score.")
             return 0
         model = LogisticRegressionModel.load(args.model)
-        predictions = [(model.probability(row), row) for row in rows]
-        probability, best = max(predictions, key=lambda item: item[0])
+        predictions = [(model.probability(row), row, transition)
+                       for row, transition in zip(rows, report.transitions)]
+        probability, best, _ = max(predictions, key=lambda item: item[0])
         print(f"Predicted best improvement: snapshot {best['from_snapshot']} -> {best['to_snapshot']} "
               f"(probability: {probability:.1%})")
-        for score, row in sorted(predictions, reverse=True, key=lambda item: item[0]):
+        for score, row, transition in sorted(predictions, reverse=True, key=lambda item: item[0]):
             print(f"  {row['from_snapshot']} -> {row['to_snapshot']}: {score:.1%}")
+            if args.explain:
+                _print_comparison_explanation(transition.before.source, transition.after.source, "    ")
+                _print_prediction_explanation(model, row, "    ")
         return 0
-    changes = analyze_versions(args.before.read_text(encoding="utf-8"), args.after.read_text(encoding="utf-8"))
+    before_source = args.before.read_text(encoding="utf-8")
+    after_source = args.after.read_text(encoding="utf-8")
+    changes = analyze_versions(before_source, after_source)
+    if args.explain:
+        _print_comparison_explanation(before_source, after_source)
     meaningful = [change for change in changes if change.is_meaningful]
     if not meaningful:
         print("No material performance-oriented improvements detected.")
