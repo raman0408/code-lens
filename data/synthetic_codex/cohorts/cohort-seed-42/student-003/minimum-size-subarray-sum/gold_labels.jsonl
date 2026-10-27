@@ -1,0 +1,2 @@
+{"from_snapshot": 1, "to_snapshot": 2, "label": 0, "decision": "correctness_fix_only", "reason": "A correct quadratic solution replaces an incorrect placeholder.", "reviewer": "synthetic-profile-author", "review_standard": "correctness_preserved_and_asymptotic_complexity_improved"}
+{"from_snapshot": 2, "to_snapshot": 3, "label": 1, "decision": "asymptotic_improvement", "reason": "A correct nested scan becomes a linear sliding window.", "reviewer": "synthetic-profile-author", "review_standard": "correctness_preserved_and_asymptotic_complexity_improved"}

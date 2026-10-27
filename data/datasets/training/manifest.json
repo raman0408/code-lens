@@ -1,0 +1,13 @@
+{
+  "tier": "training",
+  "status": "awaiting_data",
+  "purpose": "fit model parameters",
+  "record_source": "independently reviewed, consented learner timelines",
+  "student_count": 0,
+  "may_be_inspected_freely": true,
+  "permitted_model_use": "training only",
+  "exclusion_rules": [
+    "No synthetic integration records.",
+    "No learner may also appear in validation or final-test."
+  ]
+}

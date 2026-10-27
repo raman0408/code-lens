@@ -1,0 +1,13 @@
+{
+  "tier": "validation",
+  "status": "awaiting_data",
+  "purpose": "choose features, hyperparameters, and model approaches",
+  "record_source": "independently reviewed, consented learner timelines",
+  "student_count": 0,
+  "may_be_inspected_freely": true,
+  "permitted_model_use": "validation and model selection only; never parameter fitting",
+  "exclusion_rules": [
+    "No synthetic integration records.",
+    "No learner may also appear in training or final-test."
+  ]
+}

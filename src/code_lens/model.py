@@ -18,6 +18,16 @@ class FunctionMetrics:
     list_membership_checks: int
     string_concat_in_loop: int
     sliding_window_patterns: int
+    ast_node_count: int
+    control_flow_node_count: int
+    call_count: int
+    return_count: int
+    variable_read_count: int
+    variable_write_count: int
+    collection_allocation_count: int
+    slice_count: int
+    comprehension_count: int
+    recursive_call_count: int
 
 
 @dataclass(frozen=True)
@@ -58,7 +68,24 @@ class _FunctionVisitor(ast.NodeVisitor):
         self.list_membership_checks = 0
         self.string_concat_in_loop = 0
         self.sliding_window_patterns = 0
+        # These are compiler-inspired, representation-level measurements. They
+        # deliberately describe code shape instead of making another rule-based
+        # verdict; downstream ML can learn how their changes interact.
+        self.ast_node_count = 0
+        self.control_flow_node_count = 0
+        self.call_count = 0
+        self.return_count = 0
+        self.variable_read_count = 0
+        self.variable_write_count = 0
+        self.collection_allocation_count = 0
+        self.slice_count = 0
+        self.comprehension_count = 0
+        self.recursive_call_count = 0
         self.string_names: set[str] = set()
+
+    def generic_visit(self, node: ast.AST) -> None:
+        self.ast_node_count += 1
+        super().generic_visit(node)
 
     @staticmethod
     def _assigned_names(target: ast.AST) -> set[str]:
@@ -92,10 +119,12 @@ class _FunctionVisitor(ast.NodeVisitor):
 
     def visit_If(self, node: ast.If) -> None:
         self.complexity += 1
+        self.control_flow_node_count += 1
         self.generic_visit(node)
 
     def visit_IfExp(self, node: ast.IfExp) -> None:
         self.complexity += 1
+        self.control_flow_node_count += 1
         self.generic_visit(node)
 
     def visit_BoolOp(self, node: ast.BoolOp) -> None:
@@ -104,10 +133,12 @@ class _FunctionVisitor(ast.NodeVisitor):
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
         self.complexity += 1
+        self.control_flow_node_count += 1
         self.generic_visit(node)
 
     def _visit_loop(self, node: ast.AST) -> None:
         self.complexity += 1
+        self.control_flow_node_count += 1
         self.loop_count += 1
         self.loop_depth += 1
         self.max_loop_depth = max(self.max_loop_depth, self.loop_depth)
@@ -148,10 +179,16 @@ class _FunctionVisitor(ast.NodeVisitor):
         self._visit_loop(node)
 
     def visit_Call(self, node: ast.Call) -> None:
+        self.call_count += 1
         if self.loop_depth and isinstance(node.func, ast.Attribute) and node.func.attr == "sort":
             self.repeated_sort_calls += 1
         if self.loop_depth and isinstance(node.func, ast.Name) and node.func.id == "sorted":
             self.repeated_sort_calls += 1
+        if isinstance(node.func, ast.Name):
+            if node.func.id == self.node.name:
+                self.recursive_call_count += 1
+            if node.func.id in {"list", "dict", "set"}:
+                self.collection_allocation_count += 1
         self.generic_visit(node)
 
     def visit_Compare(self, node: ast.Compare) -> None:
@@ -166,11 +203,58 @@ class _FunctionVisitor(ast.NodeVisitor):
             self.string_concat_in_loop += 1
         self.generic_visit(node)
 
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, ast.Load):
+            self.variable_read_count += 1
+        elif isinstance(node.ctx, (ast.Store, ast.Del)):
+            self.variable_write_count += 1
+        self.generic_visit(node)
+
+    def visit_Return(self, node: ast.Return) -> None:
+        self.return_count += 1
+        self.generic_visit(node)
+
+    def visit_Subscript(self, node: ast.Subscript) -> None:
+        if isinstance(node.slice, ast.Slice):
+            self.slice_count += 1
+        self.generic_visit(node)
+
+    def _visit_collection_literal(self, node: ast.AST, is_comprehension: bool = False) -> None:
+        self.collection_allocation_count += 1
+        self.comprehension_count += int(is_comprehension)
+        self.generic_visit(node)
+
+    def visit_List(self, node: ast.List) -> None:
+        self._visit_collection_literal(node)
+
+    def visit_Set(self, node: ast.Set) -> None:
+        self._visit_collection_literal(node)
+
+    def visit_Dict(self, node: ast.Dict) -> None:
+        self._visit_collection_literal(node)
+
+    def visit_ListComp(self, node: ast.ListComp) -> None:
+        self._visit_collection_literal(node, is_comprehension=True)
+
+    def visit_SetComp(self, node: ast.SetComp) -> None:
+        self._visit_collection_literal(node, is_comprehension=True)
+
+    def visit_DictComp(self, node: ast.DictComp) -> None:
+        self._visit_collection_literal(node, is_comprehension=True)
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+        self.comprehension_count += 1
+        self.generic_visit(node)
+
     def metrics(self) -> FunctionMetrics:
         return FunctionMetrics(self.node.name, self.node.lineno, self.complexity, self.loop_count,
                                self.max_loop_depth, self.repeated_sort_calls,
                                self.list_membership_checks, self.string_concat_in_loop,
-                               self.sliding_window_patterns)
+                               self.sliding_window_patterns, self.ast_node_count,
+                               self.control_flow_node_count, self.call_count, self.return_count,
+                               self.variable_read_count, self.variable_write_count,
+                               self.collection_allocation_count, self.slice_count,
+                               self.comprehension_count, self.recursive_call_count)
 
 
 def analyze_source(source: str) -> ProgramAnalysis:

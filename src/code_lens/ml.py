@@ -14,7 +14,10 @@ from pathlib import Path
 FEATURE_NAMES = (
     "matched_functions", "score", "loop_depth_change", "loop_count_change",
     "cyclomatic_complexity_change", "repeated_sort_change", "list_membership_change",
-    "string_concat_change", "sliding_window_change", "before_pass_rate", "after_pass_rate", "correctness_change",
+    "string_concat_change", "sliding_window_change", "ast_node_change", "control_flow_node_change",
+    "call_count_change", "return_count_change", "variable_read_change", "variable_write_change",
+    "collection_allocation_change", "slice_change", "comprehension_change", "recursive_call_change",
+    "before_pass_rate", "after_pass_rate", "correctness_change",
     "after_is_correct", "correctness_preserved", "runtime_change_percent", "before_growth_exponent",
     "after_growth_exponent", "growth_exponent_change",
 )

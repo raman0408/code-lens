@@ -32,6 +32,22 @@ class AnalysisModelTests(unittest.TestCase):
         metrics = analyze_source(source).functions["work"]
         self.assertEqual(metrics.string_concat_in_loop, 1)
 
+    def test_extracts_compiler_inspired_program_shape_metrics(self):
+        source = (
+            "def walk(values):\n"
+            "    selected = [value for value in values if value]\n"
+            "    return walk(values[1:]) if values else selected\n"
+        )
+        metrics = analyze_source(source).functions["walk"]
+        self.assertGreater(metrics.ast_node_count, 0)
+        self.assertEqual(metrics.control_flow_node_count, 1)
+        self.assertEqual(metrics.collection_allocation_count, 1)
+        self.assertEqual(metrics.comprehension_count, 1)
+        self.assertEqual(metrics.slice_count, 1)
+        self.assertEqual(metrics.recursive_call_count, 1)
+        self.assertGreater(metrics.variable_read_count, 0)
+        self.assertGreater(metrics.variable_write_count, 0)
+
     def test_detects_conservative_sliding_window_pattern(self):
         before = "def smallest(target, values):\n    best = len(values) + 1\n    for left in range(len(values)):\n        total = 0\n        for right in range(left, len(values)):\n            total += values[right]\n            if total >= target:\n                best = min(best, right - left + 1)\n                break\n    return best\n"
         after = "def smallest(target, values):\n    left = total = 0\n    best = len(values) + 1\n    for right, value in enumerate(values):\n        total += value\n        while total >= target:\n            best = min(best, right - left + 1)\n            total -= values[left]\n            left += 1\n    return best\n"
@@ -83,6 +99,19 @@ class AnalysisModelTests(unittest.TestCase):
         self.assertFalse(row.is_eligible_improvement)
         self.assertIn('"from_snapshot": 1', saved)
 
+    def test_features_include_all_matching_functions_not_only_rule_matches(self):
+        before = "def copy(values):\n    return [value for value in values]\n"
+        after = "def copy(values):\n    result = []\n    for value in values:\n        result.append(value)\n    return result\n"
+        with TemporaryDirectory() as directory:
+            store = SnapshotStore(Path(directory) / "student-1")
+            store.capture(before, "compile")
+            store.capture(after, "submission")
+            row = extract_transition_features(analyze_snapshots(store.load()).transitions[0])
+        self.assertEqual(row.score, 0)
+        self.assertEqual(row.matched_functions, 1)
+        self.assertGreater(row.call_count_change, 0)
+        self.assertEqual(row.comprehension_change, -1)
+
     def test_eligible_improvement_must_be_correct_and_non_regressive(self):
         before = "def all_positive(values):\n    result = True\n    for value in values:\n        for copy in (value,):\n            if copy <= 0:\n                result = False\n    return result\n"
         after = "def all_positive(values):\n    return all(value > 0 for value in values)\n"
@@ -113,10 +142,11 @@ class AnalysisModelTests(unittest.TestCase):
         result = evaluate_source("def double(value):\n    return value * 2\n", spec)
         self.assertEqual(result.pass_rate, 1.0)
         self.assertIsNotNone(result.median_runtime_ms)
+        self.assertEqual(spec.benchmark_series, ())
 
     def test_evaluation_records_multi_size_growth(self):
         series = BenchmarkSeries("items", ((10, [[1] * 10]), (100, [[1] * 100])))
-        spec = ExerciseSpec("total", (([[1, 2]], 3),), (), (series,), 50)
+        spec = ExerciseSpec("total", (([[1, 2]], 3),), (), 50, (series,))
         result = evaluate_source("def total(values):\n    return sum(values)\n", spec)
         self.assertEqual(result.pass_rate, 1.0)
         self.assertEqual(len(result.series_timings_ms), 2)

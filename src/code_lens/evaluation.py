@@ -29,8 +29,10 @@ class ExerciseSpec:
     function_name: str
     tests: tuple[tuple[list[object], object], ...]
     benchmark_args: tuple[list[object], ...] = ()
-    benchmark_series: tuple[BenchmarkSeries, ...] = ()
     benchmark_repeats: int = 5
+    # Keep this after ``benchmark_repeats`` so existing positional callers
+    # continue to interpret their fourth argument as the repeat count.
+    benchmark_series: tuple[BenchmarkSeries, ...] = ()
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "ExerciseSpec":

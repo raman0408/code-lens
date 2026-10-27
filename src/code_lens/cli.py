@@ -20,7 +20,12 @@ def _metrics(metrics: FunctionMetrics) -> str:
         f"max nesting={metrics.max_loop_depth}, sorts in loops={metrics.repeated_sort_calls}, "
         f"literal-list membership checks={metrics.list_membership_checks}, "
         f"string concatenations in loops={metrics.string_concat_in_loop}, "
-        f"sliding-window patterns={metrics.sliding_window_patterns}"
+        f"sliding-window patterns={metrics.sliding_window_patterns}, "
+        f"AST nodes={metrics.ast_node_count}, control-flow nodes={metrics.control_flow_node_count}, "
+        f"calls={metrics.call_count}, returns={metrics.return_count}, reads={metrics.variable_read_count}, "
+        f"writes={metrics.variable_write_count}, allocations={metrics.collection_allocation_count}, "
+        f"slices={metrics.slice_count}, comprehensions={metrics.comprehension_count}, "
+        f"recursive calls={metrics.recursive_call_count}"
     )
 
 

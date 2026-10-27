@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .evaluation import ExerciseSpec, evaluate_source
+from .model import FunctionMetrics, analyze_source
 from .snapshots import SnapshotTransition, TimelineAnalysis
 
 
@@ -25,6 +26,16 @@ class TransitionFeatures:
     list_membership_change: int
     string_concat_change: int
     sliding_window_change: int
+    ast_node_change: int
+    control_flow_node_change: int
+    call_count_change: int
+    return_count_change: int
+    variable_read_change: int
+    variable_write_change: int
+    collection_allocation_change: int
+    slice_change: int
+    comprehension_change: int
+    recursive_call_change: int
     before_pass_rate: float | None
     after_pass_rate: float | None
     correctness_change: float | None
@@ -52,6 +63,7 @@ def extract_transition_features(
     when creating the final training set.
     """
     changes = transition.changes
+    matches = _matched_function_metrics(transition)
     before_eval = after_eval = None
     if spec and not transition.analysis_error:
         before_eval = evaluate_source(transition.before.source, spec)
@@ -72,14 +84,24 @@ def extract_transition_features(
         from_snapshot=transition.before.sequence,
         to_snapshot=transition.after.sequence,
         event=transition.after.event,
-        matched_functions=len(changes), score=transition.score,
-        loop_depth_change=sum(item.after.max_loop_depth - item.before.max_loop_depth for item in changes),
-        loop_count_change=sum(item.after.loop_count - item.before.loop_count for item in changes),
-        cyclomatic_complexity_change=sum(item.after.cyclomatic_complexity - item.before.cyclomatic_complexity for item in changes),
-        repeated_sort_change=sum(item.after.repeated_sort_calls - item.before.repeated_sort_calls for item in changes),
-        list_membership_change=sum(item.after.list_membership_checks - item.before.list_membership_checks for item in changes),
-        string_concat_change=sum(item.after.string_concat_in_loop - item.before.string_concat_in_loop for item in changes),
-        sliding_window_change=sum(item.after.sliding_window_patterns - item.before.sliding_window_patterns for item in changes),
+        matched_functions=len(matches), score=transition.score,
+        loop_depth_change=_metric_change(matches, "max_loop_depth"),
+        loop_count_change=_metric_change(matches, "loop_count"),
+        cyclomatic_complexity_change=_metric_change(matches, "cyclomatic_complexity"),
+        repeated_sort_change=_metric_change(matches, "repeated_sort_calls"),
+        list_membership_change=_metric_change(matches, "list_membership_checks"),
+        string_concat_change=_metric_change(matches, "string_concat_in_loop"),
+        sliding_window_change=_metric_change(matches, "sliding_window_patterns"),
+        ast_node_change=_metric_change(matches, "ast_node_count"),
+        control_flow_node_change=_metric_change(matches, "control_flow_node_count"),
+        call_count_change=_metric_change(matches, "call_count"),
+        return_count_change=_metric_change(matches, "return_count"),
+        variable_read_change=_metric_change(matches, "variable_read_count"),
+        variable_write_change=_metric_change(matches, "variable_write_count"),
+        collection_allocation_change=_metric_change(matches, "collection_allocation_count"),
+        slice_change=_metric_change(matches, "slice_count"),
+        comprehension_change=_metric_change(matches, "comprehension_count"),
+        recursive_call_change=_metric_change(matches, "recursive_call_count"),
         before_pass_rate=(round(before_eval.pass_rate, 3) if before_eval else None),
         after_pass_rate=(round(after_eval.pass_rate, 3) if after_eval else None),
         correctness_change=(round(after_eval.pass_rate - before_eval.pass_rate, 3)
@@ -96,6 +118,24 @@ def extract_transition_features(
         baseline_label=("meaningful_improvement" if eligible else "not_meaningful"),
         analysis_error=transition.analysis_error,
     )
+
+
+def _matched_function_metrics(transition: SnapshotTransition) -> tuple[tuple[FunctionMetrics, FunctionMetrics], ...]:
+    """Pair all shared functions, including edits with no current rule signal.
+
+    Rule attribution intentionally returns only functions with a decreased
+    monitored metric. The ML representation needs the full before/after
+    program delta, so it uses every matching top-level function instead.
+    """
+    if transition.analysis_error:
+        return ()
+    before = analyze_source(transition.before.source).functions
+    after = analyze_source(transition.after.source).functions
+    return tuple((before[name], after[name]) for name in sorted(before.keys() & after.keys()))
+
+
+def _metric_change(matches: tuple[tuple[FunctionMetrics, FunctionMetrics], ...], field: str) -> int:
+    return sum(getattr(after, field) - getattr(before, field) for before, after in matches)
 
 
 def export_timeline_jsonl(report: TimelineAnalysis, destination: Path,

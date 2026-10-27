@@ -1,14 +1,28 @@
-"""Create a reproducible, locally authored synthetic exercise batch."""
+"""Create a reproducible, locally authored synthetic exercise batch.
+
+The script creates one declared synthetic profile at a time.  Supplying a new
+student ID does not make the resulting timeline independent training data;
+new profiles require intentionally authored variations and review labels.
+"""
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
 from code_lens.snapshots import SnapshotStore
 
 
-ROOT = Path("data/synthetic_codex/student-001")
+parser = argparse.ArgumentParser(description="Build one locally authored synthetic exercise batch.")
+parser.add_argument("--output-root", type=Path, default=Path("data/synthetic_codex"),
+                    help="parent directory that will contain the student timeline")
+parser.add_argument("--student-id", default="student-001",
+                    help="synthetic profile identifier; use a distinct authored profile for each student")
+args = parser.parse_args()
+
+ROOT = args.output_root / args.student_id
+STUDENT_ID = args.student_id
 STANDARD = "correctness_preserved_and_asymptotic_complexity_improved"
 
 
@@ -20,7 +34,7 @@ def exercise(number, slug, title, function_name, spec, snapshots, labels):
     (directory / "exercise_spec.json").write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
     metadata = {
         "dataset_source": "synthetic_codex",
-        "student_id": "student-001",
+        "student_id": STUDENT_ID,
         "attempt_id": slug,
         "problem_reference": {"provider": "LeetCode", "number": number, "title": title,
                               "url": f"https://leetcode.com/problems/{slug}/"},
@@ -72,12 +86,47 @@ exercise(7, "reverse-integer", "Reverse Integer", "reverse_integer", {
     (0, "correctness_regression", "Negative overflow bounds are handled incorrectly."),
     (0, "correctness_fix_only", "Restores bounds handling without complexity change.")])
 
+exercise(9, "palindrome-number", "Palindrome Number", "is_palindrome", {
+    "function_name": "is_palindrome",
+    "tests": [
+        {"args": [121], "expected": True}, {"args": [-121], "expected": False},
+        {"args": [10], "expected": False}, {"args": [0], "expected": True},
+        {"args": [1221], "expected": True}, {"args": [123], "expected": False},
+        {"args": [2147447412], "expected": True}, {"args": [2147483647], "expected": False},
+    ], "benchmark_args": [[123454321], [2147447412], [2147483647]], "benchmark_repeats": 5000,
+}, [
+    "def is_palindrome(x):\n    return x == 0\n",
+    "def is_palindrome(x):\n    if x < 0:\n        return False\n    return True\n",
+    "def is_palindrome(x):\n    return str(x) == str(x)[::-1]\n",
+    "def is_palindrome(x):\n    digits = str(x)\n    left = 0\n    right = len(digits) - 1\n    while left < right:\n        if digits[left] != digits[right]:\n            return False\n        left += 1\n        right -= 1\n    return x >= 0\n",
+    "def is_palindrome(x):\n    if x < 0:\n        return False\n    digits = str(x)\n    return digits == digits[::-1]\n",
+    "def is_palindrome(x):\n    if x < 0:\n        return False\n    digits = []\n    for digit in str(x):\n        digits.append(digit)\n    return digits == digits[::-1]\n",
+    "def is_palindrome(x):\n    return str(abs(x)) == str(abs(x))[::-1]\n",
+    "def is_palindrome(x):\n    if x < 0:\n        return False\n    original = x\n    reversed_number = 0\n    while x > 0:\n        reversed_number = reversed_number * 10 + x % 10\n        x //= 10\n    return original == reversed_number\n",
+    "def is_palindrome(x):\n    if x < 0:\n        return False\n    if x != 0 and x % 10 == 0:\n        return False\n    reversed_half = 0\n    while x > reversed_half:\n        reversed_half = reversed_half * 10 + x % 10\n        x //= 10\n    return x == reversed_half or x == reversed_half // 10\n",
+    "def is_palindrome(x):\n    if x < 0 or (x != 0 and x % 10 == 0):\n        return False\n    reversed_half = 0\n    while x > reversed_half:\n        reversed_half = reversed_half * 10 + x % 10\n        x //= 10\n    return x == reversed_half or x == reversed_half // 10\n",
+    "def is_palindrome(x):\n    if x < 0 or (x % 10 == 0 and x != 0):\n        return False\n    reversed_half = 0\n    while x > reversed_half:\n        reversed_half = reversed_half * 10 + x % 10\n        x //= 10\n    return x == reversed_half or x == reversed_half // 10\n",
+], [(0, "not_improvement", "The after-version remains incorrect and has no complexity improvement."),
+    (0, "correctness_fix_only", "The after-version becomes correct, but this is a correctness fix rather than a complexity improvement."),
+    (0, "regression", "The after-version adds an explicit digit scan while retaining O(d) complexity."),
+    (0, "correct_refactor_only", "Both versions are O(d); this is not a material asymptotic complexity improvement."),
+    (0, "regression", "The after-version adds a list allocation and explicit loop while retaining O(d) complexity."),
+    (0, "correctness_regression", "Negative palindromic values are incorrectly accepted."),
+    (0, "correctness_fix_only", "The after-version restores correctness without an asymptotic improvement."),
+    (0, "constant_factor_only", "Half reversal processes fewer digits, but both versions are O(d)."),
+    (0, "cosmetic_refactor", "The condition is reformatted without changing complexity."),
+    (0, "cosmetic_refactor", "The condition is reordered without changing complexity.")])
+
 exercise(55, "jump-game", "Jump Game", "can_jump", {
     "function_name": "can_jump",
     "tests": [
         {"args": [[2, 3, 1, 1, 4]], "expected": True}, {"args": [[3, 2, 1, 0, 4]], "expected": False},
         {"args": [[0]], "expected": True}, {"args": [[2, 0, 0]], "expected": True}, {"args": [[1, 0, 1]], "expected": False},
-    ], "benchmark_args": [[[1] * 1000]], "benchmark_repeats": 30,
+    ], "benchmark_args": [[[1] * 1000]], "benchmark_series": [{
+        "name": "worst_case", "cases": [
+            {"size": size, "args": [[size] * size]} for size in (32, 64, 128)
+        ],
+    }], "benchmark_repeats": 30,
 }, [
     "def can_jump(nums):\n    return bool(nums)\n",
     "def can_jump(nums):\n    def visit(index):\n        if index >= len(nums) - 1:\n            return True\n        return any(visit(index + step) for step in range(1, nums[index] + 1))\n    return visit(0)\n",
@@ -124,7 +173,11 @@ exercise(189, "rotate-array", "Rotate Array", "rotate_array", {
         {"args": [[1, 2, 3, 4, 5, 6, 7], 3], "expected": [5, 6, 7, 1, 2, 3, 4]},
         {"args": [[-1, -100, 3, 99], 2], "expected": [3, 99, -1, -100]},
         {"args": [[1], 100], "expected": [1]}, {"args": [[1, 2], 0], "expected": [1, 2]},
-    ], "benchmark_args": [[list(range(500)), 250]], "benchmark_repeats": 30,
+    ], "benchmark_args": [[list(range(500)), 250]], "benchmark_series": [{
+        "name": "items", "cases": [
+            {"size": size, "args": [list(range(size)), size // 2]} for size in (64, 128, 256)
+        ],
+    }], "benchmark_repeats": 30,
 }, [
     "def rotate_array(nums, k):\n    return nums\n",
     "def rotate_array(nums, k):\n    for _ in range(k):\n        nums = [nums[-1]] + nums[:-1]\n    return nums\n",
@@ -147,7 +200,11 @@ exercise(209, "minimum-size-subarray-sum", "Minimum Size Subarray Sum", "min_sub
     "tests": [
         {"args": [7, [2, 3, 1, 2, 4, 3]], "expected": 2}, {"args": [4, [1, 4, 4]], "expected": 1},
         {"args": [11, [1, 1, 1, 1, 1, 1, 1, 1]], "expected": 0}, {"args": [15, [5, 1, 3, 5, 10, 7, 4, 9, 2, 8]], "expected": 2},
-    ], "benchmark_args": [[500, [1] * 1000]], "benchmark_repeats": 20,
+    ], "benchmark_args": [[500, [1] * 1000]], "benchmark_series": [{
+        "name": "items", "cases": [
+            {"size": size, "args": [size + 1, [1] * size]} for size in (32, 64, 128)
+        ],
+    }], "benchmark_repeats": 20,
 }, [
     "def min_subarray_len(target, nums):\n    return 0\n",
     "def min_subarray_len(target, nums):\n    best = len(nums) + 1\n    for start in range(len(nums)):\n        total = 0\n        for end in range(start, len(nums)):\n            total += nums[end]\n            if total >= target:\n                best = min(best, end - start + 1)\n                break\n    return 0 if best == len(nums) + 1 else best\n",
