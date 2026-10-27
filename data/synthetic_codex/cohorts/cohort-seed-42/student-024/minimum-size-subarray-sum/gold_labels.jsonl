@@ -1,0 +1,2 @@
+{"from_snapshot": 1, "to_snapshot": 2, "label": 0, "decision": "incorrect", "reason": "The implementation only recognizes one-element answers.", "reviewer": "synthetic-profile-author", "review_standard": "correctness_preserved_and_asymptotic_complexity_improved"}
+{"from_snapshot": 2, "to_snapshot": 3, "label": 0, "decision": "correct_but_quadratic", "reason": "The final version is correct but not optimized.", "reviewer": "synthetic-profile-author", "review_standard": "correctness_preserved_and_asymptotic_complexity_improved"}

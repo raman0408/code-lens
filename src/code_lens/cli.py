@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 from .evaluation import ExerciseSpec
-from .features import export_timeline_jsonl, extract_transition_features
+from .features import (assemble_reviewed_dataset, audit_static_rules, export_timeline_jsonl,
+                       extract_transition_features)
 from .ml import LogisticRegressionModel, labels_from_rows, load_jsonl, train
 from .model import FunctionMetrics, analyze_source, analyze_versions
 from .snapshots import SnapshotStore, analyze_snapshots
@@ -17,7 +19,13 @@ def _metrics(metrics: FunctionMetrics) -> str:
         f"complexity={metrics.cyclomatic_complexity}, loops={metrics.loop_count}, "
         f"max nesting={metrics.max_loop_depth}, sorts in loops={metrics.repeated_sort_calls}, "
         f"literal-list membership checks={metrics.list_membership_checks}, "
-        f"string concatenations in loops={metrics.string_concat_in_loop}"
+        f"string concatenations in loops={metrics.string_concat_in_loop}, "
+        f"sliding-window patterns={metrics.sliding_window_patterns}, "
+        f"AST nodes={metrics.ast_node_count}, control-flow nodes={metrics.control_flow_node_count}, "
+        f"calls={metrics.call_count}, returns={metrics.return_count}, reads={metrics.variable_read_count}, "
+        f"writes={metrics.variable_write_count}, allocations={metrics.collection_allocation_count}, "
+        f"slices={metrics.slice_count}, comprehensions={metrics.comprehension_count}, "
+        f"recursive calls={metrics.recursive_call_count}"
     )
 
 
@@ -70,6 +78,14 @@ def main() -> int:
     dataset.add_argument("store", type=Path)
     dataset.add_argument("output", type=Path)
     dataset.add_argument("--spec", type=Path, help="exercise tests and benchmark configuration")
+    reviewed_dataset = subparsers.add_parser("reviewed-dataset", help="join features with reviewed labels for ML training")
+    reviewed_dataset.add_argument("output", type=Path)
+    reviewed_dataset.add_argument("stores", type=Path, nargs="+",
+                                  help="attempt directories containing transitions, labels, and metadata")
+    audit = subparsers.add_parser("audit", help="compare static rule signals with reviewed labels")
+    audit.add_argument("dataset", type=Path, help="assembled reviewed JSONL dataset")
+    audit.add_argument("--details", action="store_true", help="show every static-rule disagreement")
+    audit.add_argument("--output", type=Path, help="optional JSON report destination")
     demo = subparsers.add_parser("demo", help="create and analyze a three-version sample timeline")
     demo.add_argument("store", type=Path)
     train_model = subparsers.add_parser("train", help="train a logistic-regression transition classifier")
@@ -113,6 +129,27 @@ def main() -> int:
         rows = export_timeline_jsonl(report, args.output, spec)
         print(f"Exported {len(rows)} transition feature rows to {args.output}.")
         return 0
+    if args.command == "reviewed-dataset":
+        rows = assemble_reviewed_dataset(args.stores, args.output)
+        print(f"Assembled {len(rows)} reviewed transition rows from {len(args.stores)} store(s): {args.output}")
+        return 0
+    if args.command == "audit":
+        rows = load_jsonl(args.dataset)
+        report = audit_static_rules(rows)
+        print(f"Reviewed transitions: {report.reviewed}")
+        print(f"Static signals: {report.static_positive}; reviewed positives: {report.reviewed_positive}")
+        print(f"True positives: {report.true_positive}; true negatives: {report.true_negative}")
+        print(f"False positives: {report.false_positive}; false negatives: {report.false_negative}")
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(asdict(report), indent=2) + "\n", encoding="utf-8")
+            print(f"Audit report: {args.output}")
+        if args.details:
+            for item in report.disagreements:
+                print(f"  {item['outcome']}: {item['student_id']}/{item['attempt_id']} "
+                      f"{item['from_snapshot']} -> {item['to_snapshot']} "
+                      f"(score: {item['static_score']}, review: {item['review_decision']})")
+        return 0
     if args.command == "demo":
         store = SnapshotStore(args.store)
         if store.manifest_path.exists():
@@ -144,8 +181,12 @@ def main() -> int:
             print("No snapshot transitions to score.")
             return 0
         model = LogisticRegressionModel.load(args.model)
-        predictions = [(model.probability(row), row, transition)
-                       for row, transition in zip(rows, report.transitions)]
+        eligible = [(row, transition) for row, transition in zip(rows, report.transitions)
+                    if row["is_eligible_improvement"]]
+        if not eligible:
+            print("No correctness-verified, structurally meaningful transitions to score.")
+            return 0
+        predictions = [(model.probability(row), row, transition) for row, transition in eligible]
         probability, best, _ = max(predictions, key=lambda item: item[0])
         print(f"Predicted best improvement: snapshot {best['from_snapshot']} -> {best['to_snapshot']} "
               f"(probability: {probability:.1%})")

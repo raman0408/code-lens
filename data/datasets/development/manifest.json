@@ -1,0 +1,13 @@
+{
+  "tier": "development",
+  "status": "active",
+  "purpose": "web-application development, debugging, and integration checks",
+  "record_source": "synthetic",
+  "sources": [
+    "data/synthetic_codex/student-001",
+    "data/synthetic_codex/cohorts/cohort-seed-42"
+  ],
+  "may_be_inspected_freely": true,
+  "permitted_model_use": "pipeline and integration checks only; not model fitting or reported evaluation",
+  "warning": "Synthetic records are not independent learner behaviour."
+}

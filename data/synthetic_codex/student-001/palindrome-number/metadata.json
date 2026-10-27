@@ -1,0 +1,17 @@
+{
+  "dataset_source": "synthetic_codex",
+  "student_id": "student-001",
+  "attempt_id": "palindrome-number",
+  "problem_reference": {
+    "provider": "LeetCode",
+    "number": 9,
+    "title": "Palindrome Number",
+    "url": "https://leetcode.com/problems/palindrome-number/"
+  },
+  "function_name": "is_palindrome",
+  "language": "python",
+  "snapshot_count": 11,
+  "label_status": "reviewed_gold_example",
+  "review_standard": "A positive label requires full after-version correctness, no correctness regression, and a material asymptotic complexity improvement. Constant-factor and cosmetic improvements are negative examples.",
+  "notes": "A deliberately varied synthetic progression containing incorrect attempts, correct string-based approaches, a regression, and an integer half-reversal solution. Do not use this timeline as human training data or as a final ground-truth label source."
+}

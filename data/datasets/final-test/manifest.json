@@ -1,0 +1,14 @@
+{
+  "tier": "final-test",
+  "status": "reserved_and_empty",
+  "purpose": "one-time final evaluation of the frozen application and model",
+  "record_source": "independently reviewed, consented learner timelines",
+  "student_count": 0,
+  "may_be_inspected_freely": false,
+  "permitted_model_use": "one final evaluation after training and validation are frozen",
+  "exclusion_rules": [
+    "No synthetic integration records.",
+    "No learner may also appear in training or validation.",
+    "Do not add records until the modelling protocol is frozen."
+  ]
+}
