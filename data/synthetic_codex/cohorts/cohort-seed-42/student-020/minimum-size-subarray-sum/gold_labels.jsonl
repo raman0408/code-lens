@@ -1,2 +1,0 @@
-{"from_snapshot": 1, "to_snapshot": 2, "label": 0, "decision": "syntax_churn", "reason": "The second snapshot remains invalid Python.", "reviewer": "synthetic-profile-author", "review_standard": "correctness_preserved_and_asymptotic_complexity_improved"}
-{"from_snapshot": 2, "to_snapshot": 3, "label": 0, "decision": "syntax_fix_to_quadratic", "reason": "The final version is correct but quadratic.", "reviewer": "synthetic-profile-author", "review_standard": "correctness_preserved_and_asymptotic_complexity_improved"}

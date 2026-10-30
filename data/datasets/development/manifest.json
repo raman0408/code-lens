@@ -1,13 +1,21 @@
 {
   "tier": "development",
-  "status": "active",
+  "status": "active_synthetic",
   "purpose": "web-application development, debugging, and integration checks",
   "record_source": "synthetic",
   "sources": [
-    "data/synthetic_codex/student-001",
-    "data/synthetic_codex/cohorts/cohort-seed-42"
+    "data/datasets/development/uniform-five-problem-seed-101"
   ],
+  "student_count": 1,
   "may_be_inspected_freely": true,
   "permitted_model_use": "pipeline and integration checks only; not model fitting or reported evaluation",
-  "warning": "Synthetic records are not independent learner behaviour."
+  "warning": "Synthetic records are not independent learner behaviour.",
+  "generation_seed": 101,
+  "problems": [
+    7,
+    55,
+    58,
+    189,
+    209
+  ]
 }

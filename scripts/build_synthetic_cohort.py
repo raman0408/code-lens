@@ -222,7 +222,8 @@ def _spec() -> dict[str, object]:
     }
 
 
-def _write_attempt(root: Path, student_id: str, profile: str, variant: int, seed: int) -> None:
+def _write_attempt(root: Path, student_id: str, profile: str, variant: int, seed: int,
+                   dataset_tier: str) -> None:
     directory = root / student_id / ATTEMPT_ID
     if directory.exists():
         raise FileExistsError(f"refusing to overwrite existing attempt: {directory}")
@@ -234,6 +235,7 @@ def _write_attempt(root: Path, student_id: str, profile: str, variant: int, seed
     (directory / "exercise_spec.json").write_text(json.dumps(spec_data, indent=2) + "\n", encoding="utf-8")
     metadata = {
         "dataset_source": "synthetic_codex_profile_cohort",
+        "dataset_tier": dataset_tier,
         "student_id": student_id,
         "attempt_id": ATTEMPT_ID,
         "learner_profile": profile,
@@ -271,6 +273,10 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--variants-per-profile", type=int, default=3)
     parser.add_argument("--profiles", nargs="+", choices=PROFILES, default=list(PROFILES))
+    parser.add_argument("--student-prefix", default="student",
+                        help="prefix for generated student IDs; use a distinct prefix per dataset tier")
+    parser.add_argument("--dataset-tier", choices=("development", "training", "validation", "final-test"),
+                        default="development", help="intended partition for the generated cohort")
     args = parser.parse_args()
     if args.variants_per_profile < 1:
         parser.error("--variants-per-profile must be positive")
@@ -282,8 +288,8 @@ def main() -> int:
     attempts = []
     for profile in args.profiles:
         for variant in range(args.variants_per_profile):
-            student_id = f"student-{student_number:03d}"
-            _write_attempt(cohort_root, student_id, profile, variant, args.seed)
+            student_id = f"{args.student_prefix}-{student_number:03d}"
+            _write_attempt(cohort_root, student_id, profile, variant, args.seed, args.dataset_tier)
             attempts.append(cohort_root / student_id / ATTEMPT_ID)
             student_number += 1
     reviewed_rows = assemble_reviewed_dataset(attempts, cohort_root / "reviewed-transitions.jsonl")
@@ -293,6 +299,7 @@ def main() -> int:
     )
     manifest = {
         "dataset_source": "synthetic_codex_profile_cohort",
+        "dataset_tier": args.dataset_tier,
         "generation_seed": args.seed,
         "profiles": args.profiles,
         "variants_per_profile": args.variants_per_profile,

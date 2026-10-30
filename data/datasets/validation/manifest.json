@@ -1,13 +1,23 @@
 {
   "tier": "validation",
-  "status": "awaiting_data",
+  "status": "active_synthetic",
   "purpose": "choose features, hyperparameters, and model approaches",
-  "record_source": "independently reviewed, consented learner timelines",
-  "student_count": 0,
+  "record_source": "profile-authored synthetic learner timelines",
+  "student_count": 2,
+  "sources": [
+    "data/datasets/validation/uniform-five-problem-seed-303"
+  ],
   "may_be_inspected_freely": true,
   "permitted_model_use": "validation and model selection only; never parameter fitting",
   "exclusion_rules": [
-    "No synthetic integration records.",
     "No learner may also appear in training or final-test."
+  ],
+  "generation_seed": 303,
+  "problems": [
+    7,
+    55,
+    58,
+    189,
+    209
   ]
 }

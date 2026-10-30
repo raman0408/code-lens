@@ -1,0 +1,19 @@
+{
+  "dataset_source": "synthetic_codex",
+  "dataset_tier": "development",
+  "profile_variant": 102,
+  "student_id": "dev-001",
+  "attempt_id": "jump-game",
+  "problem_reference": {
+    "provider": "LeetCode",
+    "number": 55,
+    "title": "Jump Game",
+    "url": "https://leetcode.com/problems/jump-game/"
+  },
+  "function_name": "can_jump",
+  "language": "python",
+  "snapshot_count": 10,
+  "label_status": "reviewed_gold_example",
+  "review_standard": "A positive label requires full after-version correctness, no correctness regression, and a material asymptotic complexity improvement.",
+  "notes": "Synthetic Codex-assisted timeline. Local tests and labels are project-authored, not copied judge data."
+}

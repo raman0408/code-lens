@@ -19,6 +19,13 @@ parser.add_argument("--output-root", type=Path, default=Path("data/synthetic_cod
                     help="parent directory that will contain the student timeline")
 parser.add_argument("--student-id", default="student-001",
                     help="synthetic profile identifier; use a distinct authored profile for each student")
+parser.add_argument("--dataset-tier", choices=("development", "training", "validation", "final-test"),
+                    default="development")
+parser.add_argument("--variant", type=int, default=0,
+                    help="authored-profile variant identifier; recorded in metadata and snapshot comments")
+parser.add_argument("--problems", type=int, nargs="+", default=(7, 55, 58, 189, 209),
+                    choices=(7, 9, 55, 58, 189, 209),
+                    help="LeetCode problem numbers to generate")
 args = parser.parse_args()
 
 ROOT = args.output_root / args.student_id
@@ -27,6 +34,8 @@ STANDARD = "correctness_preserved_and_asymptotic_complexity_improved"
 
 
 def exercise(number, slug, title, function_name, spec, snapshots, labels):
+    if number not in args.problems:
+        return
     directory = ROOT / slug
     if directory.exists():
         raise FileExistsError(f"refusing to replace existing timeline: {directory}")
@@ -34,6 +43,8 @@ def exercise(number, slug, title, function_name, spec, snapshots, labels):
     (directory / "exercise_spec.json").write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
     metadata = {
         "dataset_source": "synthetic_codex",
+        "dataset_tier": args.dataset_tier,
+        "profile_variant": args.variant,
         "student_id": STUDENT_ID,
         "attempt_id": slug,
         "problem_reference": {"provider": "LeetCode", "number": number, "title": title,
@@ -48,6 +59,10 @@ def exercise(number, slug, title, function_name, spec, snapshots, labels):
     (directory / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     store = SnapshotStore(directory)
     for sequence, source in enumerate(snapshots, 1):
+        # The comment preserves a semantically equivalent but content-distinct
+        # authored variant, preventing accidental byte-for-byte duplication
+        # across synthetic partitions.
+        source = f"{source.rstrip()}\n# synthetic profile variant {args.variant}\n"
         store.capture(source, "submission" if sequence in {5, len(snapshots)} else "compile")
     reviews = []
     for sequence, (label, decision, reason) in enumerate(labels, 1):

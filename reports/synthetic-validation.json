@@ -1,0 +1,153 @@
+{
+  "dataset_kind": "synthetic_validation_only",
+  "attempts": 10,
+  "deterministic_timeline_accuracy": 1.0,
+  "ml_timeline_accuracy": 1.0,
+  "no_improvement_attempts": 4,
+  "details": [
+    {
+      "student_id": "validation-001",
+      "attempt_id": "jump-game",
+      "expected_best": [
+        4,
+        5
+      ],
+      "deterministic_selected": [
+        4,
+        5
+      ],
+      "ml_selected": [
+        4,
+        5
+      ],
+      "deterministic_correct": true,
+      "ml_correct": true
+    },
+    {
+      "student_id": "validation-001",
+      "attempt_id": "length-of-last-word",
+      "expected_best": null,
+      "deterministic_selected": null,
+      "ml_selected": null,
+      "deterministic_correct": true,
+      "ml_correct": true
+    },
+    {
+      "student_id": "validation-001",
+      "attempt_id": "minimum-size-subarray-sum",
+      "expected_best": [
+        3,
+        4
+      ],
+      "deterministic_selected": [
+        3,
+        4
+      ],
+      "ml_selected": [
+        3,
+        4
+      ],
+      "deterministic_correct": true,
+      "ml_correct": true
+    },
+    {
+      "student_id": "validation-001",
+      "attempt_id": "reverse-integer",
+      "expected_best": null,
+      "deterministic_selected": null,
+      "ml_selected": null,
+      "deterministic_correct": true,
+      "ml_correct": true
+    },
+    {
+      "student_id": "validation-001",
+      "attempt_id": "rotate-array",
+      "expected_best": [
+        3,
+        4
+      ],
+      "deterministic_selected": [
+        3,
+        4
+      ],
+      "ml_selected": [
+        3,
+        4
+      ],
+      "deterministic_correct": true,
+      "ml_correct": true
+    },
+    {
+      "student_id": "validation-002",
+      "attempt_id": "jump-game",
+      "expected_best": [
+        4,
+        5
+      ],
+      "deterministic_selected": [
+        4,
+        5
+      ],
+      "ml_selected": [
+        4,
+        5
+      ],
+      "deterministic_correct": true,
+      "ml_correct": true
+    },
+    {
+      "student_id": "validation-002",
+      "attempt_id": "length-of-last-word",
+      "expected_best": null,
+      "deterministic_selected": null,
+      "ml_selected": null,
+      "deterministic_correct": true,
+      "ml_correct": true
+    },
+    {
+      "student_id": "validation-002",
+      "attempt_id": "minimum-size-subarray-sum",
+      "expected_best": [
+        3,
+        4
+      ],
+      "deterministic_selected": [
+        3,
+        4
+      ],
+      "ml_selected": [
+        3,
+        4
+      ],
+      "deterministic_correct": true,
+      "ml_correct": true
+    },
+    {
+      "student_id": "validation-002",
+      "attempt_id": "reverse-integer",
+      "expected_best": null,
+      "deterministic_selected": null,
+      "ml_selected": null,
+      "deterministic_correct": true,
+      "ml_correct": true
+    },
+    {
+      "student_id": "validation-002",
+      "attempt_id": "rotate-array",
+      "expected_best": [
+        3,
+        4
+      ],
+      "deterministic_selected": [
+        3,
+        4
+      ],
+      "ml_selected": [
+        3,
+        4
+      ],
+      "deterministic_correct": true,
+      "ml_correct": true
+    }
+  ]
+}

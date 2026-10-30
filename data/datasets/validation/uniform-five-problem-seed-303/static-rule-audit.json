@@ -1,0 +1,51 @@
+{
+  "reviewed": 90,
+  "static_positive": 10,
+  "reviewed_positive": 6,
+  "true_positive": 6,
+  "true_negative": 80,
+  "false_positive": 4,
+  "false_negative": 0,
+  "disagreements": [
+    {
+      "student_id": "validation-001",
+      "attempt_id": "length-of-last-word",
+      "from_snapshot": 5,
+      "to_snapshot": 6,
+      "static_score": 7,
+      "reviewed_label": 0,
+      "review_decision": "correct_refactor_only",
+      "outcome": "false_positive"
+    },
+    {
+      "student_id": "validation-001",
+      "attempt_id": "length-of-last-word",
+      "from_snapshot": 9,
+      "to_snapshot": 10,
+      "static_score": 7,
+      "reviewed_label": 0,
+      "review_decision": "cosmetic_refactor",
+      "outcome": "false_positive"
+    },
+    {
+      "student_id": "validation-002",
+      "attempt_id": "length-of-last-word",
+      "from_snapshot": 5,
+      "to_snapshot": 6,
+      "static_score": 7,
+      "reviewed_label": 0,
+      "review_decision": "correct_refactor_only",
+      "outcome": "false_positive"
+    },
+    {
+      "student_id": "validation-002",
+      "attempt_id": "length-of-last-word",
+      "from_snapshot": 9,
+      "to_snapshot": 10,
+      "static_score": 7,
+      "reviewed_label": 0,
+      "review_decision": "cosmetic_refactor",
+      "outcome": "false_positive"
+    }
+  ]
+}

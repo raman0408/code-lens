@@ -1,14 +1,24 @@
 {
   "tier": "final-test",
-  "status": "reserved_and_empty",
+  "status": "sealed_synthetic",
   "purpose": "one-time final evaluation of the frozen application and model",
-  "record_source": "independently reviewed, consented learner timelines",
-  "student_count": 0,
+  "record_source": "profile-authored synthetic learner timelines",
+  "student_count": 2,
+  "sources": [
+    "data/datasets/final-test/uniform-five-problem-seed-404"
+  ],
   "may_be_inspected_freely": false,
   "permitted_model_use": "one final evaluation after training and validation are frozen",
   "exclusion_rules": [
-    "No synthetic integration records.",
     "No learner may also appear in training or validation.",
-    "Do not add records until the modelling protocol is frozen."
+    "Do not alter, inspect, or tune against this cohort until final evaluation."
+  ],
+  "generation_seed": 404,
+  "problems": [
+    7,
+    55,
+    58,
+    189,
+    209
   ]
 }

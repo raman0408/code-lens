@@ -17,9 +17,10 @@ Each attempt directory is a `SnapshotStore` compatible timeline:
 The problem statement itself is not copied here. Exercise specifications and
 tests are authored for this project.
 
-Current `student-001` exercises are Palindrome Number, Reverse Integer, Jump
-Game, Length of Last Word, Rotate Array, and Minimum Size Subarray Sum. The
-batch can be reproduced with:
+Generated cohorts now live under `data/datasets/`, whose tier manifests define
+their permitted use. This directory retains only the source generators and
+their documentation. The single-profile batch can be reproduced here for
+development experiments with:
 
 ```powershell
 $env:PYTHONPATH = "src"
@@ -34,8 +35,8 @@ separate review labels.
 ## Profile-driven synthetic cohorts
 
 `scripts/build_synthetic_cohort.py` creates deliberately different learner
-profiles rather than copies of `student-001`. The default generates three
-variants of each of these nine profiles (27 students): gradual trial and error,
+profiles. The default generates three variants of each of these nine profiles
+(27 students): gradual trial and error,
 no clue to a mediocre answer, correct then optimized, brute force to optimal,
 frequent delete and retry, optimal with edge-case errors, syntax struggles,
 average-case logic struggles, and perfect improver.
@@ -45,7 +46,8 @@ $env:PYTHONPATH = "src"
 python scripts/build_synthetic_cohort.py --seed 42 --variants-per-profile 3
 ```
 
-The cohort is written below `data/synthetic_codex/cohorts/cohort-seed-42` and
-includes each attempt, a combined `reviewed-transitions.jsonl`, and a
-`static-rule-audit.json`. It also refuses to overwrite an existing cohort.
-This data remains synthetic and is unsuitable for reporting model accuracy.
+The output root is configurable; the active cohorts use the corresponding
+directory below `data/datasets/`. Each cohort includes attempts, a combined
+`reviewed-transitions.jsonl`, and a `static-rule-audit.json`. The generator
+refuses to overwrite an existing cohort. This data remains synthetic and is
+unsuitable for reporting real-world model accuracy.

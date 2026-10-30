@@ -10,6 +10,7 @@ from .features import (assemble_reviewed_dataset, audit_static_rules, export_tim
                        extract_transition_features)
 from .ml import LogisticRegressionModel, labels_from_rows, load_jsonl, train
 from .model import FunctionMetrics, analyze_source, analyze_versions
+from .ranking import rank_timeline, rank_timeline_with_model
 from .snapshots import SnapshotStore, analyze_snapshots
 
 
@@ -73,6 +74,8 @@ def main() -> int:
     capture.add_argument("--event", choices=("compile", "submission"), required=True)
     timeline = subparsers.add_parser("timeline", help="analyze every consecutive snapshot in a store")
     timeline.add_argument("store", type=Path)
+    timeline.add_argument("--spec", type=Path,
+                          help="require correctness and complexity evidence when selecting the best transition")
     timeline.add_argument("--explain", action="store_true", help="show evidence for every snapshot transition")
     dataset = subparsers.add_parser("dataset", help="export ML-ready transition features as JSONL")
     dataset.add_argument("store", type=Path)
@@ -113,6 +116,17 @@ def main() -> int:
                     print(f"  analysis error: {transition.analysis_error}")
                 else:
                     _print_comparison_explanation(transition.before.source, transition.after.source, "  ")
+        if args.spec:
+            spec = ExerciseSpec.from_dict(json.loads(args.spec.read_text(encoding="utf-8")))
+            ranking = rank_timeline(report, spec)
+            best = ranking.best
+            if best is None:
+                print("No transition is fully correct, non-regressive, and supported by improvement evidence.")
+                return 0
+            print(f"Best eligible improvement: snapshot {best.transition.before.sequence} -> "
+                  f"{best.transition.after.sequence} (rank: {best.rank}, score: {best.features.score})")
+            print(f"  after-version passes all defined tests; evidence: {', '.join(best.evidence)}")
+            return 0
         best = report.best_improvement
         if best is None:
             print("No material performance-oriented improvement detected across the snapshot timeline.")
@@ -176,25 +190,23 @@ def main() -> int:
     if args.command == "predict":
         report = analyze_snapshots(SnapshotStore(args.store).load())
         spec = ExerciseSpec.from_dict(json.loads(args.spec.read_text(encoding="utf-8"))) if args.spec else None
-        rows = [extract_transition_features(item, spec).to_dict() for item in report.transitions]
-        if not rows:
-            print("No snapshot transitions to score.")
-            return 0
+        if spec is None:
+            parser.error("predict requires --spec so ML can enforce correctness eligibility")
         model = LogisticRegressionModel.load(args.model)
-        eligible = [(row, transition) for row, transition in zip(rows, report.transitions)
-                    if row["is_eligible_improvement"]]
-        if not eligible:
-            print("No correctness-verified, structurally meaningful transitions to score.")
+        ranking = rank_timeline_with_model(report, spec, model)
+        if not ranking.best:
+            print("No correctness-verified transition with analysed complexity-improvement evidence to score.")
             return 0
-        predictions = [(model.probability(row), row, transition) for row, transition in eligible]
-        probability, best, _ = max(predictions, key=lambda item: item[0])
-        print(f"Predicted best improvement: snapshot {best['from_snapshot']} -> {best['to_snapshot']} "
-              f"(probability: {probability:.1%})")
-        for score, row, transition in sorted(predictions, reverse=True, key=lambda item: item[0]):
-            print(f"  {row['from_snapshot']} -> {row['to_snapshot']}: {score:.1%}")
-            if args.explain:
-                _print_comparison_explanation(transition.before.source, transition.after.source, "    ")
-                _print_prediction_explanation(model, row, "    ")
+        best = ranking.best
+        print(f"ML-selected best improvement: snapshot {best.transition.before.sequence} -> "
+              f"{best.transition.after.sequence} (probability: {best.ml_probability:.1%})")
+        print(f"  eligibility evidence: {', '.join(best.evidence)}")
+        if args.explain:
+            for candidate in ranking.candidates:
+                print(f"  {candidate.transition.before.sequence} -> {candidate.transition.after.sequence}: "
+                      f"{candidate.ml_probability:.1%}")
+                _print_comparison_explanation(candidate.transition.before.source, candidate.transition.after.source, "    ")
+                _print_prediction_explanation(model, candidate.features.to_dict(), "    ")
         return 0
     before_source = args.before.read_text(encoding="utf-8")
     after_source = args.after.read_text(encoding="utf-8")

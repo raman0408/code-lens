@@ -1,0 +1,16 @@
+{
+  "dataset_source": "uniform_synthetic_codex",
+  "dataset_tier": "training",
+  "generation_seed": 202,
+  "student_count": 3,
+  "problems": [
+    7,
+    55,
+    58,
+    189,
+    209
+  ],
+  "attempts_per_student": 5,
+  "sealed": false,
+  "warning": "Synthetic-only integration corpus; not evidence of real learner behaviour."
+}

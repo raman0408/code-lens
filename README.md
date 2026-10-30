@@ -24,12 +24,12 @@ ranking model.
 - Exercise evaluation runs tests and optional benchmark series in a separate
   process. Multi-size benchmark series produce a log-log growth-exponent
   estimate; this is supporting evidence, not a formal complexity proof.
-- `data/synthetic_codex/student-001` contains six reviewed synthetic attempt
-  timelines: Palindrome Number, Reverse Integer, Jump Game, Length of Last
-  Word, Rotate Array, and Minimum Size Subarray Sum.
-- The synthetic dataset has 55 labelled transitions. Its refreshed static-rule
-  audit finds all 3 reviewed algorithmic improvements (0 false negatives), but
-  still has 4 false positives. See `data/synthetic_codex/static-rule-audit.json`.
+- Fresh profile-authored synthetic cohorts are partitioned under
+  `data/datasets/`: development (1 student), training (3), validation (2),
+  and sealed final-test (2). Every learner attempts the same five questions:
+  Reverse Integer, Jump Game, Length of Last Word, Rotate Array, and Minimum
+  Size Subarray Sum. They exercise the complete synthetic-only
+  workflow without mixing learner identities between tiers.
 - The batch generator recreates a single declared synthetic profile and refuses
   to overwrite an existing one. Run `python scripts/build_synthetic_batch.py
   --help` for its output-root and student-ID options.
@@ -81,7 +81,7 @@ ranking model.
 ```powershell
 $env:PYTHONPATH = "src"
 python -m unittest discover -s tests -v
-python -m code_lens.cli audit data/synthetic_codex/reviewed-transitions.jsonl --details --output data/synthetic_codex/static-rule-audit.json
+python -m code_lens.cli audit data/datasets/training/cohort-seed-202/reviewed-transitions.jsonl --details
 ```
 
 Useful starting points are `src/code_lens/model.py` (static rules),
@@ -127,7 +127,7 @@ code-lens demo .code-lens/demo-student
 code-lens dataset .code-lens/student-42 data/student-42.jsonl --spec examples/exercise_spec.json
 
 # Join generated features to separate human-review labels before training.
-code-lens reviewed-dataset data/reviewed-transitions.jsonl data/synthetic_codex/student-001/palindrome-number
+code-lens reviewed-dataset data/reviewed-transitions.jsonl data/datasets/training/cohort-seed-202/train-001/minimum-size-subarray-sum
 
 # Measure where static rules disagree with human review.
 code-lens audit data/reviewed-transitions.jsonl --details --output data/static-rule-audit.json
@@ -153,6 +153,15 @@ code-lens train data/reviewer-labelled-transitions.jsonl models/improvement-mode
 code-lens predict .code-lens/student-42 models/improvement-model.json --spec examples/exercise_spec.json
 ```
 
+For the synthetic-only project workflow, generate all uniform tiers and then
+train and validate without reading the sealed final-test tier:
+
+```powershell
+$env:PYTHONPATH = "src"
+python scripts/build_uniform_synthetic_datasets.py
+python scripts/evaluate_synthetic_ranker.py data/datasets/training/uniform-five-problem-seed-202/reviewed-transitions.jsonl data/datasets/validation/uniform-five-problem-seed-303 models/synthetic-ml-ranker.json reports/synthetic-validation.json
+```
+
 For a runnable demonstration, `examples/reviewer_labelled_transitions.jsonl` is
 a deliberately small synthetic labelled dataset. It only proves the workflow;
 collect many real, independently instructor-labelled timelines before reporting
@@ -168,6 +177,20 @@ code-lens train data/bootstrap.jsonl models/bootstrap-model.json --use-baseline-
 ```
 
 The tool reports evidence-backed candidates; it does not claim a measured speed-up. Runtime benchmarking and more languages are planned next steps.
+
+## Final decision contract
+
+For a completed student attempt, Code Lens first rejects a transition unless its
+after-version passes every defined test, does not regress versus its predecessor,
+and has either a recognised algorithmic signal or a material benchmark-growth
+reduction. The logistic-regression model is then the ranking authority: it
+selects the highest-probability transition from the eligible candidates. The
+static and benchmark evidence remain in the result so the teacher can inspect
+why the ML-selected transition was allowed to compete.
+
+`code_lens.engine.analyze_attempt()` is the application-facing API. It returns
+a stable report payload containing the selected version pair (or no result),
+ML probability, eligibility evidence, and a human-readable conclusion.
 
 ## Layout
 

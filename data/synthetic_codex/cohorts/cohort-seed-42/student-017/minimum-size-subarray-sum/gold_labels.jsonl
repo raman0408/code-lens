@@ -1,1 +1,0 @@
-{"from_snapshot": 1, "to_snapshot": 2, "label": 0, "decision": "correctness_fix_only", "reason": "The algorithm is already linear; this fixes the no-solution edge case.", "reviewer": "synthetic-profile-author", "review_standard": "correctness_preserved_and_asymptotic_complexity_improved"}

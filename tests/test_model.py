@@ -5,9 +5,11 @@ from tempfile import TemporaryDirectory
 
 from code_lens.model import analyze_source, analyze_versions
 from code_lens.evaluation import BenchmarkSeries, ExerciseSpec, evaluate_source
+from code_lens.engine import analyze_attempt
 from code_lens.features import (assemble_reviewed_dataset, audit_static_rules, export_timeline_jsonl,
-                                 extract_transition_features)
+                                 extract_transition_features, is_eligible_best_transition, validate_best_labels)
 from code_lens.ml import LogisticRegressionModel, labels_from_rows, train
+from code_lens.ranking import rank_timeline, rank_timeline_with_model
 from code_lens.snapshots import SnapshotStore, analyze_snapshots
 
 
@@ -123,7 +125,7 @@ class AnalysisModelTests(unittest.TestCase):
             row = extract_transition_features(analyze_snapshots(store.load()).transitions[0], spec)
         self.assertTrue(row.after_is_correct)
         self.assertTrue(row.correctness_preserved)
-        self.assertTrue(row.is_eligible_improvement)
+        self.assertFalse(row.is_eligible_improvement)
 
     def test_incorrect_after_version_is_not_an_eligible_improvement(self):
         before = "def all_positive(values):\n    result = True\n    for value in values:\n        for copy in (value,):\n            if copy <= 0:\n                result = False\n    return result\n"
@@ -136,6 +138,66 @@ class AnalysisModelTests(unittest.TestCase):
             row = extract_transition_features(analyze_snapshots(store.load()).transitions[0], spec)
         self.assertFalse(row.after_is_correct)
         self.assertFalse(row.is_eligible_improvement)
+
+    def test_timeline_ranking_requires_correctness_and_improvement_evidence(self):
+        before = "def smallest(target, values):\n    best = len(values) + 1\n    for left in range(len(values)):\n        total = 0\n        for right in range(left, len(values)):\n            total += values[right]\n            if total >= target:\n                best = min(best, right - left + 1)\n                break\n    return 0 if best == len(values) + 1 else best\n"
+        after = "def smallest(target, values):\n    left = total = 0\n    best = len(values) + 1\n    for right, value in enumerate(values):\n        total += value\n        while total >= target:\n            best = min(best, right - left + 1)\n            total -= values[left]\n            left += 1\n    return 0 if best == len(values) + 1 else best\n"
+        spec = ExerciseSpec("smallest", (([7, [2, 3, 1, 2, 4, 3]], 2),))
+        with TemporaryDirectory() as directory:
+            store = SnapshotStore(Path(directory) / "student-1")
+            store.capture(before, "compile")
+            store.capture(after, "submission")
+            ranking = rank_timeline(analyze_snapshots(store.load()), spec)
+        self.assertEqual(ranking.best.transition.before.sequence, 1)
+        self.assertTrue(ranking.best.features.after_is_correct)
+        self.assertTrue(ranking.best.features.is_eligible_improvement)
+
+    def test_ml_ranking_only_selects_eligible_transitions(self):
+        before = "def smallest(target, values):\n    best = len(values) + 1\n    for left in range(len(values)):\n        for right in range(left, len(values)):\n            if sum(values[left:right + 1]) >= target:\n                best = min(best, right - left + 1)\n    return 0 if best == len(values) + 1 else best\n"
+        after = "def smallest(target, values):\n    left = total = 0\n    best = len(values) + 1\n    for right, value in enumerate(values):\n        total += value\n        while total >= target:\n            best = min(best, right - left + 1)\n            total -= values[left]\n            left += 1\n    return 0 if best == len(values) + 1 else best\n"
+        spec = ExerciseSpec("smallest", (([7, [2, 3, 1, 2, 4, 3]], 2),))
+        rows = [{"score": 0, "label": 0}, {"score": 5, "label": 1}]
+        model = train(rows, labels_from_rows(rows), epochs=10)
+        with TemporaryDirectory() as directory:
+            store = SnapshotStore(Path(directory) / "student-1")
+            store.capture(before, "compile")
+            store.capture(after, "submission")
+            ranking = rank_timeline_with_model(analyze_snapshots(store.load()), spec, model)
+        self.assertIsNotNone(ranking.best)
+        self.assertIsNotNone(ranking.best.ml_probability)
+
+    def test_application_attempt_analysis_reports_ml_authority(self):
+        before = "def smallest(target, values):\n    best = len(values) + 1\n    for left in range(len(values)):\n        for right in range(left, len(values)):\n            total = sum(values[left:right + 1])\n            if total >= target:\n                best = min(best, right - left + 1)\n    return 0 if best == len(values) + 1 else best\n"
+        after = "def smallest(target, values):\n    left = total = 0\n    best = len(values) + 1\n    for right, value in enumerate(values):\n        total += value\n        while total >= target:\n            best = min(best, right - left + 1)\n            total -= values[left]\n            left += 1\n    return 0 if best == len(values) + 1 else best\n"
+        spec = ExerciseSpec("smallest", (([7, [2, 3, 1, 2, 4, 3]], 2),))
+        model = train([{"score": 0, "label": 0}, {"score": 5, "label": 1}], [0, 1], epochs=10)
+        with TemporaryDirectory() as directory:
+            store_path = Path(directory) / "student-1"
+            store = SnapshotStore(store_path)
+            store.capture(before, "compile")
+            store.capture(after, "submission")
+            result = analyze_attempt(store_path, spec, model)
+        self.assertEqual(result.selection_authority, "ml")
+        self.assertEqual(result.selected_transition, (1, 2))
+        self.assertIsNotNone(result.ml_probability)
+
+    def test_best_label_validation_rejects_incorrect_or_duplicate_best_rows(self):
+        invalid = {"student_id": "student-1", "attempt_id": "attempt-1", "from_snapshot": 1,
+                   "to_snapshot": 2, "label": 1, "score": 4, "after_is_correct": False,
+                   "correctness_preserved": True, "analysis_error": None}
+        with self.assertRaisesRegex(ValueError, "fully correct"):
+            validate_best_labels([invalid])
+        valid = {**invalid, "after_is_correct": True, "sliding_window_change": 1}
+        duplicate = {**valid, "from_snapshot": 2, "to_snapshot": 3}
+        with self.assertRaisesRegex(ValueError, "multiple best"):
+            validate_best_labels([valid, duplicate])
+
+    def test_generic_control_flow_reduction_is_not_algorithmic_eligibility_evidence(self):
+        self.assertFalse(is_eligible_best_transition({
+            "score": 7, "loop_depth_change": -1, "sliding_window_change": 0,
+            "repeated_sort_change": 0, "list_membership_change": 0, "string_concat_change": 0,
+            "after_is_correct": True, "correctness_preserved": True, "analysis_error": None,
+        }))
 
     def test_evaluation_runs_tests_and_benchmark(self):
         spec = ExerciseSpec("double", (([2], 4), ([3], 6)), ([100],), 2)
@@ -161,17 +223,16 @@ class AnalysisModelTests(unittest.TestCase):
                 "language": "python", "problem_reference": {"number": 1, "title": "Example"},
             }), encoding="utf-8")
             (store / "transitions.jsonl").write_text(
-                '{"from_snapshot": 1, "to_snapshot": 2, "score": 4}\n'
-                '{"from_snapshot": 2, "to_snapshot": 3, "score": 0}\n', encoding="utf-8")
+                '{"from_snapshot": 1, "to_snapshot": 2, "score": 4, "sliding_window_change": 1, "after_is_correct": true, "correctness_preserved": true, "analysis_error": null}\n'
+                '{"from_snapshot": 2, "to_snapshot": 3, "score": 0, "after_is_correct": false, "correctness_preserved": false, "analysis_error": null}\n', encoding="utf-8")
             (store / "gold_labels.jsonl").write_text(
-                '{"from_snapshot": 1, "to_snapshot": 2, "label": 0, "decision": "refactor"}\n'
-                '{"from_snapshot": 2, "to_snapshot": 3, "label": 1, "decision": "algorithm"}\n', encoding="utf-8")
+                '{"from_snapshot": 1, "to_snapshot": 2, "label": 1, "decision": "algorithm"}\n'
+                '{"from_snapshot": 2, "to_snapshot": 3, "label": 0, "decision": "incorrect"}\n', encoding="utf-8")
             destination = Path(directory) / "reviewed.jsonl"
             rows = assemble_reviewed_dataset([store], destination)
             report = audit_static_rules(rows)
         self.assertEqual(len(rows), 2)
-        self.assertEqual(report.false_positive, 1)
-        self.assertEqual(report.false_negative, 1)
+        self.assertEqual(report.true_positive, 1)
 
     def test_trains_and_serializes_ml_classifier(self):
         rows = [

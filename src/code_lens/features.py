@@ -12,6 +12,9 @@ from .model import FunctionMetrics, analyze_source
 from .snapshots import SnapshotTransition, TimelineAnalysis
 
 
+MINIMUM_GROWTH_EXPONENT_REDUCTION = 0.25
+
+
 @dataclass(frozen=True)
 class TransitionFeatures:
     from_snapshot: int
@@ -75,11 +78,23 @@ def extract_transition_features(
     correctness_preserved = (after_eval.pass_rate >= before_eval.pass_rate
                              if before_eval and after_eval else None)
     after_is_correct = after_eval.is_correct if after_eval else None
-    eligible = bool(
-        transition.is_meaningful
-        and after_is_correct
-        and correctness_preserved
-    )
+    growth_exponent_change = (round(after_eval.growth_exponent - before_eval.growth_exponent, 3)
+                              if before_eval and after_eval and before_eval.growth_exponent is not None
+                              and after_eval.growth_exponent is not None else None)
+    structural_changes = {
+        "sliding_window_change": _metric_change(matches, "sliding_window_patterns"),
+        "repeated_sort_change": _metric_change(matches, "repeated_sort_calls"),
+        "list_membership_change": _metric_change(matches, "list_membership_checks"),
+        "string_concat_change": _metric_change(matches, "string_concat_in_loop"),
+    }
+    eligible = is_eligible_best_transition({
+        "score": transition.score,
+        "after_is_correct": after_is_correct,
+        "correctness_preserved": correctness_preserved,
+        "growth_exponent_change": growth_exponent_change,
+        "analysis_error": transition.analysis_error,
+        **structural_changes,
+    })
     return TransitionFeatures(
         from_snapshot=transition.before.sequence,
         to_snapshot=transition.after.sequence,
@@ -112,11 +127,46 @@ def extract_transition_features(
         runtime_change_percent=runtime_change,
         before_growth_exponent=(round(before_eval.growth_exponent, 3) if before_eval and before_eval.growth_exponent is not None else None),
         after_growth_exponent=(round(after_eval.growth_exponent, 3) if after_eval and after_eval.growth_exponent is not None else None),
-        growth_exponent_change=(round(after_eval.growth_exponent - before_eval.growth_exponent, 3)
-                                if before_eval and after_eval and before_eval.growth_exponent is not None
-                                and after_eval.growth_exponent is not None else None),
+        growth_exponent_change=growth_exponent_change,
         baseline_label=("meaningful_improvement" if eligible else "not_meaningful"),
         analysis_error=transition.analysis_error,
+    )
+
+
+def has_analyzed_improvement(row: dict[str, object]) -> bool:
+    """Whether static or benchmark analysis supports a material improvement."""
+    # A generic reduction in control flow can be a readability refactor (for
+    # example, two linear scans becoming one) without changing asymptotic
+    # complexity.  Eligibility therefore requires a recognised high-signal
+    # algorithmic transformation, not merely the aggregate rule score.
+    structural_evidence = any(
+        isinstance(row.get(name), (int, float)) and not isinstance(row.get(name), bool) and condition(row[name])
+        for name, condition in (
+            ("sliding_window_change", lambda value: value > 0),
+            ("repeated_sort_change", lambda value: value < 0),
+            ("list_membership_change", lambda value: value < 0),
+            ("string_concat_change", lambda value: value < 0),
+        )
+    )
+    growth_change = row.get("growth_exponent_change")
+    benchmark_evidence = (not isinstance(growth_change, bool)
+                          and isinstance(growth_change, (int, float))
+                          and growth_change <= -MINIMUM_GROWTH_EXPONENT_REDUCTION)
+    return structural_evidence or benchmark_evidence
+
+
+def is_eligible_best_transition(row: dict[str, object]) -> bool:
+    """Apply the non-negotiable contract for a labelled best transition.
+
+    The after-version must pass every defined test, must not regress relative
+    to its predecessor, and must have structural or measured complexity
+    evidence.  A parse/evaluation error can never qualify.
+    """
+    return bool(
+        row.get("analysis_error") is None
+        and row.get("after_is_correct") is True
+        and row.get("correctness_preserved") is True
+        and has_analyzed_improvement(row)
     )
 
 
@@ -205,9 +255,29 @@ def assemble_reviewed_dataset(stores: Iterable[Path], destination: Path) -> list
                 "problem_title": metadata.get("problem_reference", {}).get("title"),
             })
             assembled.append(row)
+    validate_best_labels(assembled)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text("".join(json.dumps(row) + "\n" for row in assembled), encoding="utf-8")
     return assembled
+
+
+def validate_best_labels(rows: Iterable[dict[str, object]]) -> None:
+    """Reject invalid or ambiguous reviewed `best` labels before ML can use them."""
+    positives: set[tuple[str, str]] = set()
+    for row in rows:
+        label = row.get("label")
+        if label != 1:
+            continue
+        timeline = (str(row.get("student_id")), str(row.get("attempt_id")))
+        if timeline in positives:
+            raise ValueError(f"multiple best labels for timeline {timeline}")
+        if not is_eligible_best_transition(row):
+            raise ValueError(
+                "best label requires a fully correct after-version, no correctness regression, "
+                "and analysed algorithmic or complexity-improvement evidence: "
+                f"{timeline} {row.get('from_snapshot')} -> {row.get('to_snapshot')}"
+            )
+        positives.add(timeline)
 
 
 def _rows_by_transition(rows: list[dict[str, object]], source: Path) -> dict[tuple[int, int], dict[str, object]]:

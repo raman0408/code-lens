@@ -1,0 +1,19 @@
+{
+  "dataset_source": "synthetic_codex",
+  "dataset_tier": "training",
+  "profile_variant": 205,
+  "student_id": "train-003",
+  "attempt_id": "reverse-integer",
+  "problem_reference": {
+    "provider": "LeetCode",
+    "number": 7,
+    "title": "Reverse Integer",
+    "url": "https://leetcode.com/problems/reverse-integer/"
+  },
+  "function_name": "reverse_integer",
+  "language": "python",
+  "snapshot_count": 10,
+  "label_status": "reviewed_gold_example",
+  "review_standard": "A positive label requires full after-version correctness, no correctness regression, and a material asymptotic complexity improvement.",
+  "notes": "Synthetic Codex-assisted timeline. Local tests and labels are project-authored, not copied judge data."
+}
