@@ -13,6 +13,7 @@ from .snapshots import SnapshotTransition, TimelineAnalysis
 
 
 MINIMUM_GROWTH_EXPONENT_REDUCTION = 0.25
+DEMO_MINIMUM_AST_NODE_REDUCTION = 8
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,8 @@ class TransitionFeatures:
     after_is_correct: bool | None
     correctness_preserved: bool | None
     is_eligible_improvement: bool
+    is_demo_eligible_improvement: bool
+    improvement_kind: str
     runtime_change_percent: float | None
     before_growth_exponent: float | None
     after_growth_exponent: float | None
@@ -87,14 +90,19 @@ def extract_transition_features(
         "list_membership_change": _metric_change(matches, "list_membership_checks"),
         "string_concat_change": _metric_change(matches, "string_concat_in_loop"),
     }
-    eligible = is_eligible_best_transition({
+    eligibility_row = {
         "score": transition.score,
         "after_is_correct": after_is_correct,
         "correctness_preserved": correctness_preserved,
+        "ast_node_change": _metric_change(matches, "ast_node_count"),
+        "loop_depth_change": _metric_change(matches, "max_loop_depth"),
+        "loop_count_change": _metric_change(matches, "loop_count"),
         "growth_exponent_change": growth_exponent_change,
         "analysis_error": transition.analysis_error,
         **structural_changes,
-    })
+    }
+    eligible = is_eligible_best_transition(eligibility_row)
+    demo_eligible = is_eligible_demo_transition(eligibility_row)
     return TransitionFeatures(
         from_snapshot=transition.before.sequence,
         to_snapshot=transition.after.sequence,
@@ -124,6 +132,8 @@ def extract_transition_features(
         after_is_correct=after_is_correct,
         correctness_preserved=correctness_preserved,
         is_eligible_improvement=eligible,
+        is_demo_eligible_improvement=demo_eligible,
+        improvement_kind=("algorithmic" if eligible else "implementation" if demo_eligible else "none"),
         runtime_change_percent=runtime_change,
         before_growth_exponent=(round(before_eval.growth_exponent, 3) if before_eval and before_eval.growth_exponent is not None else None),
         after_growth_exponent=(round(after_eval.growth_exponent, 3) if after_eval and after_eval.growth_exponent is not None else None),
@@ -167,6 +177,29 @@ def is_eligible_best_transition(row: dict[str, object]) -> bool:
         and row.get("after_is_correct") is True
         and row.get("correctness_preserved") is True
         and has_analyzed_improvement(row)
+    )
+
+
+def is_eligible_demo_transition(row: dict[str, object]) -> bool:
+    """Permit a clearly-labelled simplification in the local synthetic demo.
+
+    This does not relax the training-label contract: an implementation
+    simplification has the same asymptotic class and must never be labelled an
+    algorithmic improvement. It lets the teacher demonstration show a genuine,
+    fully-correct refactor when an eight-node-or-greater AST reduction removes
+    no loops or nesting.
+    """
+    if is_eligible_best_transition(row):
+        return True
+    return bool(
+        row.get("analysis_error") is None
+        and row.get("after_is_correct") is True
+        and row.get("correctness_preserved") is True
+        and isinstance(row.get("ast_node_change"), (int, float))
+        and not isinstance(row.get("ast_node_change"), bool)
+        and row["ast_node_change"] <= -DEMO_MINIMUM_AST_NODE_REDUCTION
+        and row.get("loop_depth_change", 0) <= 0
+        and row.get("loop_count_change", 0) <= 0
     )
 
 

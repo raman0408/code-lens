@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block title %}Analysis | Code Lens{% endblock %}
+{% block content %}
+<div class="workspace-head"><div><p class="eyebrow">Completed analysis · {{ attempt.student_name }}</p><h1>{{ problem.number }}. {{ problem.title }}</h1></div><a class="secondary" href="{{ url_for('workspace', attempt_id=attempt.id) }}">Back to workspace</a></div>
+<section class="result"><p class="eyebrow">{{ analysis.selection_authority|upper }} selection authority</p>{% if analysis.selected_transition %}<h2>Best {{ analysis.improvement_kind }} improvement: version {{ analysis.selected_transition[0] }} → {{ analysis.selected_transition[1] }}</h2><p class="student-summary"><strong>What changed:</strong> {{ analysis.student_summary }}</p>{% if analysis.ml_probability is not none %}<p class="confidence">ML ranking probability: {{ '%.1f'|format(analysis.ml_probability * 100) }}%</p>{% endif %}<p>{{ analysis.conclusion }}</p><ul>{% for evidence in analysis.evidence %}<li>{{ evidence }}</li>{% endfor %}</ul>{% else %}<h2>No qualifying improvement detected</h2><p>{{ analysis.conclusion }}</p>{% endif %}</section>
+<section class="stats"><div><strong>{{ analysis.snapshot_count }}</strong><span>snapshots</span></div><div><strong>{{ analysis.transition_count }}</strong><span>transitions</span></div><div><strong>{{ analysis.rejected_transition_count }}</strong><span>rejected by eligibility gate</span></div></section>
+{% if before and after %}<section><h2>Selected change</h2><div class="diff"><div><h3>Before · version {{ before.sequence }}</h3><pre><code>{{ before.source }}</code></pre></div><div><h3>After · version {{ after.sequence }}</h3><pre><code>{{ after.source }}</code></pre></div></div></section>{% endif %}
+{% endblock %}

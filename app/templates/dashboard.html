@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}Code Lens | Start{% endblock %}
+{% block content %}
+<section class="hero"><p class="eyebrow">ML-assisted code-improvement analysis</p><h1>Start a student attempt</h1><p>Choose one fixed problem, write Python, capture snapshots, then review the ML-selected improvement.</p></section>
+<section class="panel"><form method="post" action="{{ url_for('create_attempt') }}"><label>Student name<input name="student_name" required placeholder="e.g. Demo student"></label><label>Problem<select name="problem_slug" required>{% for problem in problems %}<option value="{{ problem.slug }}">{{ problem.number }}. {{ problem.title }}</option>{% endfor %}</select></label><button>Open workspace</button></form></section>
+{% if attempts %}<section><h2>Recent attempts</h2><div class="cards">{% for attempt in attempts %}<a class="card" href="{{ url_for('workspace', attempt_id=attempt.id) }}"><strong>{{ attempt.student_name }}</strong><span>{{ attempt.problem_slug.replace('-', ' ') }}</span><small>{{ attempt.status }}</small></a>{% endfor %}</div></section>{% endif %}
+{% endblock %}

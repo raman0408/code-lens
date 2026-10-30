@@ -68,10 +68,10 @@ def main() -> int:
     compare.add_argument("before", type=Path)
     compare.add_argument("after", type=Path)
     compare.add_argument("--explain", action="store_true", help="show metrics and rule points behind the result")
-    capture = subparsers.add_parser("capture", help="record a source snapshot after a compile or submission")
+    capture = subparsers.add_parser("capture", help="record a source snapshot after a compile, run, or submission")
     capture.add_argument("store", type=Path, help="directory for this student's snapshot timeline")
     capture.add_argument("source", type=Path)
-    capture.add_argument("--event", choices=("compile", "submission"), required=True)
+    capture.add_argument("--event", choices=("compile", "run", "submission"), required=True)
     timeline = subparsers.add_parser("timeline", help="analyze every consecutive snapshot in a store")
     timeline.add_argument("store", type=Path)
     timeline.add_argument("--spec", type=Path,

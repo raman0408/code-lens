@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}{{ problem.title }} | Code Lens{% endblock %}
+{% block content %}
+<div class="workspace-head"><div><p class="eyebrow">Attempt {{ attempt.id }} · {{ attempt.student_name }}</p><h1>{{ problem.number }}. {{ problem.title }}</h1><p>{{ problem.prompt }}</p></div><a class="secondary" href="{{ url_for('report', attempt_id=attempt.id) }}">View analysis</a></div>
+<form class="editor" method="post" action="{{ url_for('attempt_action', attempt_id=attempt.id) }}"><textarea name="source" spellcheck="false" aria-label="Python code">{{ code }}</textarea><div class="actions"><button name="action" value="compile">Compile & test</button><button name="action" value="run" class="secondary">Run tests</button><button name="action" value="submit" class="submit">Submit & analyse</button></div></form>
+<section><h2>Snapshot timeline</h2>{% if snapshots %}<ol class="timeline">{% for snapshot in snapshots %}<li><strong>Version {{ snapshot.sequence }}</strong><span>{{ snapshot.event }}</span><small>{{ snapshot.captured_at }}</small></li>{% endfor %}</ol>{% else %}<p class="muted">Your first Compile, Run, or Submit action will create version 1.</p>{% endif %}</section>
+{% endblock %}

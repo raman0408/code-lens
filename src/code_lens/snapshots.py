@@ -49,11 +49,11 @@ class TimelineAnalysis:
 
 
 class SnapshotStore:
-    """Local append-only store suitable for compile/submission hooks.
+    """Local append-only store suitable for editor action hooks.
 
-    A future platform can call :meth:`capture` whenever a compile or submission
-    event occurs. Source is stored separately from metadata so every attempt is
-    reproducible during assessment review.
+    A platform can call :meth:`capture` whenever a compile, test run, or
+    submission event occurs. Source is stored separately from metadata so every
+    attempt is reproducible during assessment review.
     """
 
     MANIFEST = "manifest.json"
@@ -66,8 +66,8 @@ class SnapshotStore:
         return self.directory / self.MANIFEST
 
     def capture(self, source: str, event: str) -> CodeSnapshot:
-        if event not in {"compile", "submission"}:
-            raise ValueError("event must be 'compile' or 'submission'")
+        if event not in {"compile", "run", "submission"}:
+            raise ValueError("event must be 'compile', 'run', or 'submission'")
         snapshots = list(self.load())
         sequence = len(snapshots) + 1
         digest = hashlib.sha256(source.encode("utf-8")).hexdigest()

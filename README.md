@@ -1,199 +1,184 @@
 # Code Lens
 
-Code Lens is a non-LLM analysis engine for comparing successive versions of Python code. It uses the Python AST to identify changes that plausibly improve runtime behaviour: reduced loop nesting, eliminated repeated work, cheaper membership checks, and lower structural complexity.
+Code Lens is a local, ML-assisted Python learning demo. A teacher can choose one
+of five programming questions, work through it as a student in a browser-based
+editor, and receive an explanation of the strongest observed code improvement
+between saved versions.
 
-This first iteration is terminal-first and dependency-free.
+## Team
 
-## Handoff: current state and next work
+- Aditya Raman - 24BCE0495
+- Ashrit Puralachetty - 24BDS0360
+- Pasupuleti Tanvisree - 24BCT0226
 
-This repository is a working prototype, not a validated predictive system.
-It can capture Python attempt histories, compare every consecutive pair, verify
-exercise correctness, collect small benchmark measurements, export features,
-join reviewer labels, audit static rules, and train a small logistic-regression
-ranking model.
+## What the submission demonstrates
 
-### What is complete
+- A browser workflow for five fixed LeetCode-style Python problems:
+  Reverse Integer (7), Jump Game (55), Length of Last Word (58), Rotate Array
+  (189), and Minimum Size Subarray Sum (209).
+- Compile, test-run, and submit actions that save immutable source snapshots.
+- Instructor-defined tests that determine whether each snapshot is correct.
+- AST-based code-change analysis and benchmark features.
+- A logistic-regression model that ranks eligible version-to-version changes.
+- A student-facing report showing the chosen versions, a plain-language
+  explanation, supporting evidence, and the before/after code.
 
-- AST rules detect reduced nesting, removed repeated sorting or literal-list
-  membership checks, repeated string concatenation, and a conservative
-  expand/shrink sliding-window shape.
-- A compiler-inspired feature layer also exports AST size, control-flow nodes,
-  calls, returns, variable reads/writes, collection allocations, slices,
-  comprehensions, and recursive calls. These are ML inputs, not new hard
-  verdict rules; every matching function contributes a before/after delta.
-- Exercise evaluation runs tests and optional benchmark series in a separate
-  process. Multi-size benchmark series produce a log-log growth-exponent
-  estimate; this is supporting evidence, not a formal complexity proof.
-- Fresh profile-authored synthetic cohorts are partitioned under
-  `data/datasets/`: development (1 student), training (3), validation (2),
-  and sealed final-test (2). Every learner attempts the same five questions:
-  Reverse Integer, Jump Game, Length of Last Word, Rotate Array, and Minimum
-  Size Subarray Sum. They exercise the complete synthetic-only
-  workflow without mixing learner identities between tiers.
-- The batch generator recreates a single declared synthetic profile and refuses
-  to overwrite an existing one. Run `python scripts/build_synthetic_batch.py
-  --help` for its output-root and student-ID options.
-- `scripts/build_synthetic_cohort.py` creates profile-authored synthetic
-  cohorts. Its default is 27 students: three variants of each documented
-  profile. It writes a combined reviewed dataset and audit beside the cohort.
-- `python -m unittest discover -s tests -v` currently passes all 14 tests when
-  `PYTHONPATH=src` is set.
+The ML model is the ranking authority: after correctness and eligibility checks
+identify valid candidate transitions, it chooses the highest-probability
+candidate. Static analysis is still used as a safety and interpretability gate;
+the model cannot select an incorrect transition.
 
-### Important limits
+## Requirements
 
-- Synthetic timelines are only for exercising the pipeline. They are not real
-  student behaviour and must not be mixed with human data or used to claim ML
-  accuracy.
-- `data/datasets/` defines the data-partition contract. The current synthetic
-  records are development/integration data only. Training, validation, and
-  final-test are separate empty intake tiers until independently reviewed,
-  consented learner timelines are available. The final-test tier must remain
-  untouched until one final evaluation of the frozen model.
-- A new `--student-id` output location is not an independent student profile.
-  Do not create a cohort by copying this profile under multiple IDs.
-- Rule labels are weak supervision. Train final models only with independently
-  reviewed labels, and evaluate on held-out students rather than random
-  transitions from the same student.
-- The evaluator is not a security sandbox; do not run untrusted code with it.
+- Windows PowerShell
+- Python 3.11 or newer (`python --version`)
+- A browser
 
-### Recommended next steps
+No database server, Node.js installation, API key, or internet connection is
+needed after dependencies are installed.
 
-1. Use the richer feature schema with simple, interpretable ML baselines after
-   collecting more independent labelled timelines. Do not add a graph or deep
-   model to the current 55-transition dataset.
-2. Review the four false positives in the audit and decide whether they should
-   be addressed by a stricter eligibility gate, richer ML data, or a narrowly
-   justified static rule. Preserve the three true positives and re-run the
-   audit after every rule change.
-3. Design deliberately varied synthetic profiles (different starting errors,
-   approaches, regressions, and true-improvement locations), then add an
-   explicit profile/variation mechanism to the generator before producing a
-   synthetic cohort.
-4. Collect real, consented, independently reviewed timelines. Keep them in a
-   separate directory from `data/synthetic_codex`.
-5. Once enough independent labelled students exist, add student-level
-   train/validation/test splitting and report held-out precision/recall or
-   ranking quality. Do not report model performance from the current 55
-   synthetic transitions.
+## Quick start: run the teacher demo
 
-### Fast verification for the next agent
+Open PowerShell in the repository root:
 
 ```powershell
-$env:PYTHONPATH = "src"
-python -m unittest discover -s tests -v
-python -m code_lens.cli audit data/datasets/training/cohort-seed-202/reviewed-transitions.jsonl --details
-```
-
-Useful starting points are `src/code_lens/model.py` (static rules),
-`src/code_lens/evaluation.py` (tests and benchmarks),
-`src/code_lens/features.py` (dataset assembly and audit), and
-`scripts/build_synthetic_batch.py` (synthetic-profile generation).
-
-## Run
-
-```powershell
+cd "C:\Users\Aditya Raman\AI-project"
 python -m pip install -e .
-code-lens compare examples/before.py examples/after.py
-$env:PYTHONPATH = "src"; python -m unittest discover -s tests -v
+$env:PYTHONPATH = "src;."
+python -m app.app
 ```
 
-## Snapshot timelines
+When Flask reports that it is running, open:
 
-Capture source after every compile or submission event. The directory is an
-append-only per-student timeline; source snapshots and metadata are retained.
+```text
+http://127.0.0.1:5000
+```
+
+Stop the server with `Ctrl+C` in PowerShell.
+
+`python -m app.app` is the recommended command. `python app/app.py` is also
+supported, but running the module avoids Python package-import ambiguity.
+
+### Optional: use an isolated virtual environment
 
 ```powershell
-code-lens capture .code-lens/student-42 examples/before.py --event compile
-code-lens capture .code-lens/student-42 examples/after.py --event submission
-code-lens timeline .code-lens/student-42
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .
+$env:PYTHONPATH = "src;."
+python -m app.app
 ```
 
-`timeline` analyses every consecutive pair, then identifies the exact transition
-where the strongest evidence of a meaningful complexity improvement occurred.
+If PowerShell blocks the activation script, run the four non-activation commands
+with `.venv\Scripts\python.exe` in place of `python`.
 
-## ML-ready features and one-command demo
+## Demonstration flow
 
-The static metrics now become feature vectors for a future non-LLM ranking model.
-Each JSONL line represents one consecutive code change and contains structural
-features, a weak baseline label, and—when an exercise specification is supplied—
-correctness and runtime-change features.
+1. Open the dashboard and enter a student name.
+2. Select one of the five questions and choose **Open workspace**.
+3. Write or paste a Python solution in the editor.
+4. Select **Compile & test** or **Run tests**. Each action saves a numbered,
+   immutable snapshot and shows the public test result.
+5. Make a meaningful change, then select **Submit & analyse**.
+6. Read the report. It identifies the selected transition, displays a
+   **What changed** line, evidence, and both versions of the code.
+
+For the clearest algorithmic demonstration, use **Minimum Size Subarray Sum**:
+first save a correct brute-force nested-loop implementation, then replace it in
+one edit with a correct sliding-window implementation and submit it. The report
+can then explain the switch from repeated scans to a sliding window.
+
+### Understanding the report
+
+A selected transition must always end in a fully correct version and must not
+regress test results. The normal algorithmic eligibility rule recognises:
+
+- an expand/shrink sliding window;
+- sorting removed from repeated work;
+- repeated literal-list membership checks removed;
+- repeated string concatenation in a loop removed; or
+- a material reduction in measured growth rate.
+
+The local synthetic demo additionally permits a clearly labelled
+**implementation improvement**: a fully correct simplification that removes at
+least eight AST nodes without adding loop depth or loop count. This is useful for
+showing a correct refactor such as the Reverse Integer version 9 → 10 example.
+It is explicitly not presented as an algorithmic complexity improvement and is
+not accepted as a positive label for the ML training data.
+
+The plain-language **What changed** text is intentionally fixed and
+evidence-backed, not generated by an LLM. For example, an implementation
+simplification reports the measured AST reduction; a sliding-window change
+reports that repeated subarray scans were replaced.
+
+## Verify before submitting
+
+From the repository root:
 
 ```powershell
-# Create a simulated three-version student timeline and its feature dataset.
-code-lens demo .code-lens/demo-student
-
-# Export a real student's transitions. The optional spec runs instructor tests
-# and small benchmarks in a separate Python process.
-code-lens dataset .code-lens/student-42 data/student-42.jsonl --spec examples/exercise_spec.json
-
-# Join generated features to separate human-review labels before training.
-code-lens reviewed-dataset data/reviewed-transitions.jsonl data/datasets/training/cohort-seed-202/train-001/minimum-size-subarray-sum
-
-# Measure where static rules disagree with human review.
-code-lens audit data/reviewed-transitions.jsonl --details --output data/static-rule-audit.json
+$env:PYTHONPATH = "src;."
+python -m unittest discover -s tests -v
 ```
 
-The `baseline_label` is only a transparent rule-based starting label. A transition
-is eligible for that label only when its after-version passes every exercise test,
-does not pass fewer tests than its before-version, and has a meaningful structural
-improvement score. Replace baseline labels with instructor annotations before
-training a classifier or learning-to-rank model.
-The evaluation harness is for local development; it is not a security sandbox for
-untrusted code.
+The current suite contains 23 tests covering the core analysis engine, test
+evaluator, ML ranking contract, snapshot storage, and Flask workflow.
 
-## Train and use the ML model
+Then run the web demo once using the Quick start instructions and confirm that
+you can create an attempt, save snapshots, submit, and open the report.
 
-`code-lens train` trains a binary logistic-regression model and `predict` scores
-every timeline transition, highlighting the highest-probability improvement. Add
-a human-review `label` to exported JSONL: `1` for the best/meaningful transition
-and `0` for the others. Include both labels in the training dataset.
+## Local data created by the demo
 
-```powershell
-code-lens train data/reviewer-labelled-transitions.jsonl models/improvement-model.json
-code-lens predict .code-lens/student-42 models/improvement-model.json --spec examples/exercise_spec.json
-```
+- `.code-lens/web-attempts/` stores the per-attempt snapshot source files and
+  manifests.
+- `app/instance/code_lens.db` stores the local SQLite attempt index.
 
-For the synthetic-only project workflow, generate all uniform tiers and then
-train and validate without reading the sealed final-test tier:
+These are runtime artifacts for a local demonstration. They can be deleted to
+start again with a clean set of browser attempts; do not delete the committed
+synthetic datasets under `data/datasets/`.
+
+## Synthetic dataset policy
+
+This submitted version uses synthetic data only.
+
+- `data/datasets/development/uniform-five-problem-seed-101/` is the
+  development/integration dataset.
+- `data/datasets/training/uniform-five-problem-seed-202/` is for model training.
+- `data/datasets/validation/uniform-five-problem-seed-303/` is for comparison
+  and tuning.
+- `data/datasets/final-test/uniform-five-problem-seed-404/` is sealed and must
+  remain untouched until final evaluation.
+
+The saved model is `models/synthetic-ml-ranker.json`; the synthetic validation
+report is `reports/synthetic-validation.json`. Synthetic results demonstrate
+that the workflow operates end-to-end. They are not claims about real student
+behaviour or real-world model accuracy.
+
+## Project structure
+
+- `app/` — Flask application, templates, styles, fixed problem definitions,
+  and SQLite persistence.
+- `src/code_lens/` — snapshot storage, AST analysis, test evaluation, feature
+  extraction, eligibility checks, ranking, ML model, and CLI.
+- `data/datasets/` — separated synthetic development, training, validation,
+  and final-test tiers.
+- `models/` — saved synthetic logistic-regression model.
+- `reports/` — validation output.
+- `tests/` — automated tests.
+
+## Optional command-line workflow
+
+The web application is the intended submission entry point. The core can also
+be exercised from the terminal:
 
 ```powershell
 $env:PYTHONPATH = "src"
-python scripts/build_uniform_synthetic_datasets.py
-python scripts/evaluate_synthetic_ranker.py data/datasets/training/uniform-five-problem-seed-202/reviewed-transitions.jsonl data/datasets/validation/uniform-five-problem-seed-303 models/synthetic-ml-ranker.json reports/synthetic-validation.json
+code-lens --help
+code-lens compare examples/before.py examples/after.py
 ```
 
-For a runnable demonstration, `examples/reviewer_labelled_transitions.jsonl` is
-a deliberately small synthetic labelled dataset. It only proves the workflow;
-collect many real, independently instructor-labelled timelines before reporting
-model accuracy.
+## Important safety limitation
 
-Rule labels can bootstrap a mechanics-only experiment, but are not valid final
-training data because the model would simply learn to reproduce the rules. Export
-with `--spec`; without exercise tests, transitions are not correctness-verified
-and therefore receive no positive baseline label:
-
-```powershell
-code-lens train data/bootstrap.jsonl models/bootstrap-model.json --use-baseline-labels
-```
-
-The tool reports evidence-backed candidates; it does not claim a measured speed-up. Runtime benchmarking and more languages are planned next steps.
-
-## Final decision contract
-
-For a completed student attempt, Code Lens first rejects a transition unless its
-after-version passes every defined test, does not regress versus its predecessor,
-and has either a recognised algorithmic signal or a material benchmark-growth
-reduction. The logistic-regression model is then the ranking authority: it
-selects the highest-probability transition from the eligible candidates. The
-static and benchmark evidence remain in the result so the teacher can inspect
-why the ML-selected transition was allowed to compete.
-
-`code_lens.engine.analyze_attempt()` is the application-facing API. It returns
-a stable report payload containing the selected version pair (or no result),
-ML probability, eligibility evidence, and a human-readable conclusion.
-
-## Layout
-
-- `src/code_lens/model.py` — AST feature extraction and deterministic attribution model.
-- `src/code_lens/cli.py` — terminal interface.
-- `tests/` — executable specifications.
+This is a trusted local demo only. The evaluator executes the code entered in
+the editor and is not a security sandbox. Do not deploy the app publicly or run
+untrusted submissions with it.

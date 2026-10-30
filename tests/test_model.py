@@ -7,7 +7,8 @@ from code_lens.model import analyze_source, analyze_versions
 from code_lens.evaluation import BenchmarkSeries, ExerciseSpec, evaluate_source
 from code_lens.engine import analyze_attempt
 from code_lens.features import (assemble_reviewed_dataset, audit_static_rules, export_timeline_jsonl,
-                                 extract_transition_features, is_eligible_best_transition, validate_best_labels)
+                                 extract_transition_features, is_eligible_best_transition,
+                                 is_eligible_demo_transition, validate_best_labels)
 from code_lens.ml import LogisticRegressionModel, labels_from_rows, train
 from code_lens.ranking import rank_timeline, rank_timeline_with_model
 from code_lens.snapshots import SnapshotStore, analyze_snapshots
@@ -198,6 +199,17 @@ class AnalysisModelTests(unittest.TestCase):
             "repeated_sort_change": 0, "list_membership_change": 0, "string_concat_change": 0,
             "after_is_correct": True, "correctness_preserved": True, "analysis_error": None,
         }))
+
+    def test_demo_can_identify_a_correct_implementation_simplification(self):
+        row = {
+            "score": 0, "after_is_correct": True, "correctness_preserved": True,
+            "analysis_error": None, "ast_node_change": -9,
+            "loop_depth_change": 0, "loop_count_change": 0,
+            "sliding_window_change": 0, "repeated_sort_change": 0,
+            "list_membership_change": 0, "string_concat_change": 0,
+        }
+        self.assertFalse(is_eligible_best_transition(row))
+        self.assertTrue(is_eligible_demo_transition(row))
 
     def test_evaluation_runs_tests_and_benchmark(self):
         spec = ExerciseSpec("double", (([2], 4), ([3], 6)), ([100],), 2)

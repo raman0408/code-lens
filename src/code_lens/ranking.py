@@ -29,7 +29,8 @@ class TimelineRanking:
         return self.candidates[0] if self.candidates else None
 
 
-def rank_timeline(report: TimelineAnalysis, spec: ExerciseSpec) -> TimelineRanking:
+def rank_timeline(report: TimelineAnalysis, spec: ExerciseSpec,
+                  allow_implementation_improvements: bool = False) -> TimelineRanking:
     """Rank only transitions that satisfy the best-transition contract.
 
     This deterministic ranking is the baseline for the later ML ranker.  It
@@ -40,7 +41,7 @@ def rank_timeline(report: TimelineAnalysis, spec: ExerciseSpec) -> TimelineRanki
     eligible: list[tuple[SnapshotTransition, TransitionFeatures]] = []
     for transition in report.transitions:
         features = extract_transition_features(transition, spec)
-        if features.is_eligible_improvement:
+        if _is_candidate(features, allow_implementation_improvements):
             eligible.append((transition, features))
 
     ordered = sorted(eligible, key=_ranking_key, reverse=True)
@@ -50,7 +51,8 @@ def rank_timeline(report: TimelineAnalysis, spec: ExerciseSpec) -> TimelineRanki
 
 
 def rank_timeline_with_model(report: TimelineAnalysis, spec: ExerciseSpec,
-                             model: LogisticRegressionModel) -> TimelineRanking:
+                             model: LogisticRegressionModel,
+                             allow_implementation_improvements: bool = False) -> TimelineRanking:
     """Let the ML model select the best transition from valid candidates.
 
     Correctness and analysed-improvement eligibility remain hard constraints.
@@ -60,7 +62,7 @@ def rank_timeline_with_model(report: TimelineAnalysis, spec: ExerciseSpec,
     eligible = []
     for transition in report.transitions:
         features = extract_transition_features(transition, spec)
-        if features.is_eligible_improvement:
+        if _is_candidate(features, allow_implementation_improvements):
             eligible.append((transition, features, model.probability(features.to_dict())))
     ordered = sorted(eligible, key=lambda item: (item[2], -item[0].after.sequence), reverse=True)
     candidates = tuple(RankedTransition(transition, features, index + 1, _evidence(features), probability)
@@ -77,6 +79,8 @@ def _ranking_key(item: tuple[SnapshotTransition, TransitionFeatures]) -> tuple[f
 
 def _evidence(features: TransitionFeatures) -> tuple[str, ...]:
     evidence = []
+    if features.improvement_kind == "implementation":
+        evidence.append(f"implementation simplification: AST nodes reduced by {-features.ast_node_change} (same complexity class)")
     if features.score >= 3:
         evidence.append(f"structural score {features.score}")
     if features.growth_exponent_change is not None and features.growth_exponent_change <= -0.25:
@@ -84,3 +88,9 @@ def _evidence(features: TransitionFeatures) -> tuple[str, ...]:
     if features.runtime_change_percent is not None and features.runtime_change_percent < 0:
         evidence.append(f"runtime changed by {features.runtime_change_percent:+.1f}%")
     return tuple(evidence)
+
+
+def _is_candidate(features: TransitionFeatures, allow_implementation_improvements: bool) -> bool:
+    return features.is_eligible_improvement or (
+        allow_implementation_improvements and features.is_demo_eligible_improvement
+    )

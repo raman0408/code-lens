@@ -7,6 +7,7 @@ name = "code-lens"
 version = "0.1.0"
 description = "Deterministic analysis of performance-relevant changes between Python versions."
 requires-python = ">=3.11"
+dependencies = ["Flask>=3.1,<4"]
 
 [project.scripts]
 code-lens = "code_lens.cli:main"
